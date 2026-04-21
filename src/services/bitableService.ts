@@ -127,12 +127,30 @@ async function detectParentChildRelations(
   for (const fieldMeta of fieldMetaList) {
     if (fieldMeta.type === 18 || fieldMeta.type === 19) {
       const property = (fieldMeta as any).property;
+      debugLog(`关联字段: ${fieldMeta.name}(ID:${fieldMeta.id}), type:${fieldMeta.type}, property.tableId:${property?.tableId}, 传入tableId:${tableId}, 匹配:${property?.tableId === tableId}`);
       if (property && property.tableId === tableId) {
         selfLinkFieldId = fieldMeta.id;
         break;
       }
     }
   }
+
+  if (!selfLinkFieldId) {
+    debugLog(`未找到自关联字段！尝试宽松匹配...`);
+    // 宽松匹配：只要有关联字段就尝试使用
+    for (const fieldMeta of fieldMetaList) {
+      if (fieldMeta.type === 18 || fieldMeta.type === 19) {
+        const property = (fieldMeta as any).property;
+        if (property && property.tableId) {
+          debugLog(`宽松匹配: ${fieldMeta.name}(ID:${fieldMeta.id}), property.tableId:${property.tableId}`);
+          selfLinkFieldId = fieldMeta.id;
+          break;
+        }
+      }
+    }
+  }
+
+  debugLog(`最终 selfLinkFieldId = ${selfLinkFieldId}`);
 
   if (!selfLinkFieldId) return null;
 
