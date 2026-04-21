@@ -8,11 +8,16 @@ import type {
 
 /**
  * 根据去重配置生成记录的唯一键
+ * @param record 记录数据
+ * @param config 去重配置
+ * @param mappings 字段映射
+ * @param isSourceRecord 是否为源表记录（源记录用 sourceFieldId 取值，目标记录用 targetFieldId 取值）
  */
 export function generateRecordKey(
   record: IRecordData,
   config: IDedupConfig,
   mappings: IFieldMapping[],
+  isSourceRecord: boolean = true,
 ): string {
   if (!config.enabled) {
     // 未启用去重时，使用记录 ID 作为唯一标识
@@ -23,7 +28,9 @@ export function generateRecordKey(
     // 全字段模式：使用所有映射字段的值生成键
     const keyObj: Record<string, unknown> = {};
     for (const mapping of mappings) {
-      keyObj[mapping.targetFieldId] = record.fields[mapping.sourceFieldId];
+      // 源记录用 sourceFieldId 取值，目标记录用 targetFieldId 取值
+      const fieldId = isSourceRecord ? mapping.sourceFieldId : mapping.targetFieldId;
+      keyObj[mapping.targetFieldId] = record.fields[fieldId];
     }
     return JSON.stringify(keyObj);
   }
@@ -32,7 +39,8 @@ export function generateRecordKey(
   const keyObj: Record<string, unknown> = {};
   for (const mapping of mappings) {
     if (config.dedupFields.includes(mapping.targetFieldId)) {
-      keyObj[mapping.targetFieldId] = record.fields[mapping.sourceFieldId];
+      const fieldId = isSourceRecord ? mapping.sourceFieldId : mapping.targetFieldId;
+      keyObj[mapping.targetFieldId] = record.fields[fieldId];
     }
   }
   return JSON.stringify(keyObj);
@@ -72,20 +80,25 @@ export function deduplicateRecords(
   }
 
   // 构建目标表中已有记录的键集合
+  // 关键修复：目标记录的 fields key 是目标字段 ID，所以 isSourceRecord = false
   const existingKeys = new Set<string>();
   for (const record of existingRecords) {
-    const key = generateRecordKey(record, config.dedupConfig, config.fieldMappings);
+    const key = generateRecordKey(record, config.dedupConfig, config.fieldMappings, false);
     existingKeys.add(key);
   }
+
+  // 同时构建源记录自身的键集合（用于源表内去重）
+  const sourceKeys = new Set<string>();
 
   const toMerge: IRecordData[] = [];
   const toSkip: IRecordData[] = [];
 
   for (const sourceRecord of sourceRecords) {
-    const key = generateRecordKey(sourceRecord, config.dedupConfig, config.fieldMappings);
+    // 源记录用 sourceFieldId 取值
+    const key = generateRecordKey(sourceRecord, config.dedupConfig, config.fieldMappings, true);
 
-    if (existingKeys.has(key)) {
-      // 重复记录
+    if (existingKeys.has(key) || sourceKeys.has(key)) {
+      // 与目标表重复 或 与前面已处理的源记录重复
       if (config.dedupConfig.strategy === 'overwrite') {
         // 覆盖策略：仍然合并（后续写入会覆盖）
         toMerge.push(sourceRecord);
@@ -97,6 +110,9 @@ export function deduplicateRecords(
       // 非重复记录，直接合并
       toMerge.push(sourceRecord);
     }
+
+    // 将当前源记录的 key 加入集合（防止源表内重复）
+    sourceKeys.add(key);
   }
 
   return { toMerge, toSkip };
@@ -143,6 +159,8 @@ export function generatePreview(
       sourceTableName,
       fields: mappedFields,
       isDuplicate: false,
+      isParent: !record.parentRecordId,
+      parentRecordId: record.parentRecordId,
     });
   }
 
@@ -154,6 +172,8 @@ export function generatePreview(
       sourceTableName,
       fields: mappedFields,
       isDuplicate: true,
+      isParent: !record.parentRecordId,
+      parentRecordId: record.parentRecordId,
     });
   }
 

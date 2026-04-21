@@ -380,3 +380,31 @@ export async function detectSelfLinkFieldId(tableId: string): Promise<string | n
 
   return null;
 }
+
+/**
+ * 确保目标表有自关联字段（用于建立父子关系）
+ * 如果不存在则自动创建一个单向关联字段
+ * @returns 自关联字段 ID
+ */
+export async function ensureSelfLinkField(tableId: string): Promise<string> {
+  const existingFieldId = await detectSelfLinkFieldId(tableId);
+  if (existingFieldId) {
+    return existingFieldId;
+  }
+
+  // 目标表没有自关联字段，自动创建一个
+  const table = await bitable.base.getTable(tableId);
+  const fieldName = '父记录关联';
+
+  // FieldType 18 = SingleLink
+  const fieldId = await table.addField({
+    type: 18 as any,
+    name: fieldName,
+    property: {
+      multiple: false,
+      tableId: tableId,
+    },
+  });
+
+  return fieldId;
+}

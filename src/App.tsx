@@ -24,6 +24,7 @@ import {
   getRecords,
   getTableName,
   detectSelfLinkFieldId,
+  ensureSelfLinkField,
   batchCreateRecordsWithHierarchy,
   batchCreateRecords,
 } from '@/services/bitableService';
@@ -175,8 +176,23 @@ const App: React.FC = () => {
       });
       const targetRecords = await getRecords(config.targetTableId);
 
-      // 检测目标表是否存在自关联字段（父子关系）
-      const targetLinkFieldId = await detectSelfLinkFieldId(config.targetTableId);
+      // 检测源表是否有父子关系
+      // 先加载所有源表数据来检测
+      let hasAnyParentChild = false;
+      const allSourceRecordsMap = new Map<string, IRecordData[]>();
+      for (const sourceTableId of config.sourceTableIds) {
+        const records = await getRecords(sourceTableId);
+        allSourceRecordsMap.set(sourceTableId, records);
+        if (records.some((r) => r.parentRecordId)) {
+          hasAnyParentChild = true;
+        }
+      }
+
+      // 如果源表有父子关系，确保目标表有自关联字段
+      let targetLinkFieldId: string | null = null;
+      if (hasAnyParentChild) {
+        targetLinkFieldId = await ensureSelfLinkField(config.targetTableId);
+      }
 
       // 动态导入合并引擎
       const { mergeData } = await import('@/utils/mergeEngine');
@@ -187,11 +203,11 @@ const App: React.FC = () => {
         const sourceTableName = tables.find((t) => t.id === sourceTableId)?.name || sourceTableId;
 
         try {
-          // 阶段2：加载源表数据
-          setProgressText(`正在加载源表数据 (${sourceTableName})...`);
+          // 阶段2：加载源表数据（已预加载）
+          setProgressText(`正在处理源表 (${sourceTableName})...`);
           let sourceRecords: IRecordData[] = [];
           await timer.recordPhase(`加载源表: ${sourceTableName}`, async () => {
-            sourceRecords = await getRecords(sourceTableId);
+            sourceRecords = allSourceRecordsMap.get(sourceTableId) || await getRecords(sourceTableId);
           });
 
           result.totalRecords += sourceRecords.length;
