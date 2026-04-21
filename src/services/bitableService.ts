@@ -115,38 +115,53 @@ export async function getRecords(tableId: string): Promise<IRecordData[]> {
 
 /**
  * 检测记录间的父子关系
+ * 策略：扫描记录数据中所有字段值，找到包含 IOpenLink 格式且 tableId 指向自身的字段
  */
 async function detectParentChildRelations(
   tableId: string,
   records: IRecordData[],
 ): Promise<Map<string, { parentId?: string; childIds: string[] }> | null> {
-  const table = await bitable.base.getTable(tableId);
-  const fieldMetaList = await table.getFieldMetaList();
+  if (records.length === 0) return null;
 
+  // 第一步：通过扫描记录数据发现自关联字段
+  // IOpenLink 格式: { recordIds: string[], tableId: string, text: string, type: "text" }
   let selfLinkFieldId: string | null = null;
-  for (const fieldMeta of fieldMetaList) {
-    if (fieldMeta.type === 18 || fieldMeta.type === 19) {
-      const property = (fieldMeta as any).property;
-      debugLog(`关联字段: ${fieldMeta.name}(ID:${fieldMeta.id}), type:${fieldMeta.type}, property.tableId:${property?.tableId}, 传入tableId:${tableId}, 匹配:${property?.tableId === tableId}`);
-      if (property && property.tableId === tableId) {
-        selfLinkFieldId = fieldMeta.id;
-        break;
-      }
-    }
-  }
 
-  if (!selfLinkFieldId) {
-    debugLog(`未找到自关联字段！尝试宽松匹配...`);
-    // 宽松匹配：只要有关联字段就尝试使用
-    for (const fieldMeta of fieldMetaList) {
-      if (fieldMeta.type === 18 || fieldMeta.type === 19) {
-        const property = (fieldMeta as any).property;
-        if (property && property.tableId) {
-          debugLog(`宽松匹配: ${fieldMeta.name}(ID:${fieldMeta.id}), property.tableId:${property.tableId}`);
-          selfLinkFieldId = fieldMeta.id;
-          break;
+  for (const record of records) {
+    for (const [fieldId, value] of Object.entries(record.fields)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const v = value as any;
+        // 检查是否是 IOpenLink 格式
+        if ((v.recordIds || v.record_ids) && v.tableId) {
+          const ids = v.recordIds || v.record_ids || [];
+          if (Array.isArray(ids) && ids.length > 0 && v.tableId === tableId) {
+            selfLinkFieldId = fieldId;
+            debugLog(`通过数据扫描发现自关联字段: ${fieldId} (tableId=${v.tableId})`);
+            break;
+          }
         }
       }
+    }
+    if (selfLinkFieldId) break;
+  }
+
+  // 第二步：如果数据扫描没找到，尝试通过字段元数据查找
+  if (!selfLinkFieldId) {
+    try {
+      const table = await bitable.base.getTable(tableId);
+      const fieldMetaList = await table.getFieldMetaList();
+      for (const fieldMeta of fieldMetaList) {
+        if (fieldMeta.type === 18 || fieldMeta.type === 19) {
+          const property = (fieldMeta as any).property;
+          if (property && property.tableId === tableId) {
+            selfLinkFieldId = fieldMeta.id;
+            debugLog(`通过字段元数据发现自关联字段: ${fieldMeta.name}(ID:${fieldMeta.id})`);
+            break;
+          }
+        }
+      }
+    } catch (e: any) {
+      debugLog(`字段元数据查找失败: ${e.message}`);
     }
   }
 
@@ -154,59 +169,23 @@ async function detectParentChildRelations(
 
   if (!selfLinkFieldId) return null;
 
+  // 第三步：构建父子关系映射
   const relationMap = new Map<string, { parentId?: string; childIds: string[] }>();
   for (const record of records) {
     relationMap.set(record.recordId, { childIds: [] });
   }
 
   for (const record of records) {
-    // 先用 fields 中的值
-    let linkValue = record.fields[selfLinkFieldId];
-
-    // 如果 fields 中关联值为空数组，尝试用 getCellValue 单独读取
-    if (!linkValue || (typeof linkValue === 'object' && (linkValue as any).recordIds?.length === 0)) {
-      try {
-        linkValue = await table.getCellValue(selfLinkFieldId, record.recordId);
-        if (linkValue !== record.fields[selfLinkFieldId]) {
-          debugLog(`记录 ${record.recordId}: getCellValue 返回不同值: ${JSON.stringify(linkValue)}`);
-        }
-      } catch (e: any) {
-        debugLog(`记录 ${record.recordId}: getCellValue 失败: ${e.message}`);
-      }
-    }
-
+    const linkValue = record.fields[selfLinkFieldId];
     const relation = relationMap.get(record.recordId)!;
 
-    if (linkValue) {
-      let parentIds: string[] = [];
-      if (Array.isArray(linkValue)) {
-        parentIds = linkValue
-          .map((item: any) => {
-            if (typeof item === 'string') return item;
-            if (item && typeof item === 'object') {
-              return item.recordId || item.record_ids?.[0] || item.link || item.id || null;
-            }
-            return null;
-          })
-          .filter(Boolean);
-      } else if (typeof linkValue === 'string' && linkValue.startsWith('rec')) {
-        parentIds = [linkValue];
-      } else if (typeof linkValue === 'object' && linkValue !== null) {
-        // IOpenLink 格式: { recordIds: string[], record_ids: string[], tableId, text, type }
-        const ids = (linkValue as any).recordIds || (linkValue as any).record_ids || [];
-        if (Array.isArray(ids) && ids.length > 0) {
-          parentIds = ids;
-        } else {
-          const pid = (linkValue as any).recordId || (linkValue as any).link || (linkValue as any).id;
-          if (pid) parentIds = [pid];
-        }
-      }
-
-      debugLog(`记录 ${record.recordId} 关联值完整结构: ${JSON.stringify(linkValue)}`);
-      debugLog(`记录 ${record.recordId} 关联值类型: ${typeof linkValue}, 提取父ID: ${parentIds.length > 0 ? parentIds : '无'}`);
+    if (linkValue && typeof linkValue === 'object' && !Array.isArray(linkValue)) {
+      const v = linkValue as any;
+      const parentIds: string[] = v.recordIds || v.record_ids || [];
 
       if (parentIds.length > 0) {
         relation.parentId = parentIds[0];
+        debugLog(`记录 ${record.recordId} -> 父记录 ${parentIds[0]}`);
         for (const pid of parentIds) {
           const parentRelation = relationMap.get(pid);
           if (parentRelation) {
