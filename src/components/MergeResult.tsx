@@ -6,6 +6,7 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
   NodeIndexOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import type { IMergeResult, ITimeRecord } from '@/types';
 
@@ -228,6 +229,21 @@ const MergeResult: React.FC<IMergeResultProps> = ({ result }) => {
                 <Tag color="red">错误 {index + 1}</Tag>
                 <Text type="danger">{error}</Text>
               </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* 调试日志 */}
+      {result.debugMessages && result.debugMessages.length > 0 && (
+        <Card
+          title={<Space><BugOutlined style={{ color: '#3370ff' }} />调试日志</Space>}
+          className="result-error-card"
+          size="small"
+        >
+          <div className="result-errors" style={{ maxHeight: 300, overflow: 'auto', fontSize: 12, fontFamily: 'monospace', background: '#f5f6f7', padding: 8, borderRadius: 4 }}>
+            {result.debugMessages.map((log, index) => (
+              <div key={index} style={{ lineHeight: '1.8', wordBreak: 'break-all' }}>{log}</div>
             ))}
           </div>
         </Card>

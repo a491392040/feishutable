@@ -1,6 +1,19 @@
 import { bitable, type IRecordValue } from '@lark-base-open/js-sdk';
 import type { IFieldMeta, ITableMeta, IRecordData } from '@/types';
 
+/** 调试日志收集器 */
+export const debugLogs: string[] = [];
+function debugLog(msg: string) {
+  debugLogs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+  console.log('[Debug]', msg);
+}
+/** 获取并清空调试日志 */
+export function getDebugLogs(): string[] {
+  const logs = [...debugLogs];
+  debugLogs.length = 0;
+  return logs;
+}
+
 /**
  * 获取所有数据表列表
  */
@@ -218,12 +231,12 @@ export async function batchCreateRecordsWithHierarchy(
   const parentEntries = recordsWithMeta.filter((r) => r.isParent);
   const childEntries = recordsWithMeta.filter((r) => !r.isParent && r.sourceParentId);
 
-  console.log(`[Hierarchy] 总记录: ${recordsWithMeta.length}, 父记录: ${parentEntries.length}, 子记录: ${childEntries.length}`);
+  debugLog(`[Hierarchy] 总记录: ${recordsWithMeta.length}, 父记录: ${parentEntries.length}, 子记录: ${childEntries.length}`);
   if (parentEntries.length > 0) {
-    console.log(`[Hierarchy] 父记录示例:`, JSON.stringify(parentEntries[0].fields).slice(0, 200));
+    debugLog(`[Hierarchy] 父记录示例: ${JSON.stringify(parentEntries[0].fields).slice(0, 300)}`);
   }
   if (childEntries.length > 0) {
-    console.log(`[Hierarchy] 子记录示例:`, JSON.stringify(childEntries[0].fields).slice(0, 200));
+    debugLog(`[Hierarchy] 子记录示例: ${JSON.stringify(childEntries[0].fields).slice(0, 300)}`);
   }
 
   // ============================================
@@ -237,7 +250,7 @@ export async function batchCreateRecordsWithHierarchy(
         fields: entry.fields as IRecordValue['fields'],
       }));
       const newRecordIds = await table.addRecords(recordValues);
-      console.log(`[Hierarchy] 父记录创建成功: ${newRecordIds.length} 条, IDs:`, newRecordIds);
+      debugLog(`[Hierarchy] 父记录创建成功: ${newRecordIds.length} 条, IDs: ${newRecordIds.join(',')}`);
       for (let j = 0; j < newRecordIds.length; j++) {
         sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
       }
@@ -267,6 +280,9 @@ export async function batchCreateRecordsWithHierarchy(
               recordIds: [newParentId],
               tableId: tableId,
             };
+            debugLog(`[Hierarchy] 子记录 ${entry.sourceRecordId} -> 关联父记录 ${newParentId}`);
+          } else {
+            debugLog(`[Hierarchy] 子记录 ${entry.sourceRecordId} -> 父记录 ${entry.sourceParentId} 未找到映射，跳过关联`);
           }
         }
 

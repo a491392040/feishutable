@@ -110,6 +110,8 @@ export interface IMergeResult {
   childRecords: number;
   /** 错误信息列表 */
   errorMessages: string[];
+  /** 调试日志 */
+  debugMessages?: string[];
   /** 耗时统计 */
   timings?: IMergeTimings;
 }

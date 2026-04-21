@@ -27,6 +27,7 @@ import {
   ensureSelfLinkField,
   batchCreateRecordsWithHierarchy,
   batchCreateRecords,
+  getDebugLogs,
 } from '@/services/bitableService';
 import TableSelector from '@/components/TableSelector';
 import FieldMappingConfig from '@/components/FieldMappingConfig';
@@ -34,7 +35,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.0.8';
+const APP_VERSION = 'v1.0.8-debug';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -287,6 +288,12 @@ const App: React.FC = () => {
       // 结束计时
       const timings = timer.stop();
       result.timings = timings;
+
+      // 收集调试日志
+      const logs = getDebugLogs();
+      if (logs.length > 0) {
+        result.debugMessages = logs;
+      }
 
       setMergeResult(result);
 
