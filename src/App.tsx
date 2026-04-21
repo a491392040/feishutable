@@ -36,7 +36,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.0.9';
+const APP_VERSION = 'v1.0.10';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -189,6 +189,10 @@ const App: React.FC = () => {
         const parentCount = records.filter((r) => !r.parentRecordId).length;
         const childCount = records.filter((r) => !!r.parentRecordId).length;
         serviceDebugLog(`源表 ${sourceTableId}: 总${records.length}条, 父${parentCount}条, 子${childCount}条`);
+        // 打印每条记录的完整数据
+        for (const r of records) {
+          serviceDebugLog(`记录 ${r.recordId}, parentRecordId=${r.parentRecordId || '无'}, fields=${JSON.stringify(r.fields)}`);
+        }
         if (records.some((r) => r.parentRecordId)) {
           hasAnyParentChild = true;
         }
