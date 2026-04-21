@@ -36,7 +36,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.1';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -237,9 +237,11 @@ const App: React.FC = () => {
           let toMerge: Record<string, unknown>[] = [];
           let toSkip: IRecordData[] = [];
           await timer.recordPhase(`去重计算: ${sourceTableName}`, async () => {
+            serviceDebugLog(`去重: 源表${sourceTableName} ${sourceRecords.length}条 vs 目标表+已合并 ${targetRecords.length}条`);
             const mergeResult = mergeData(sourceRecords, targetRecords, config);
             toMerge = mergeResult.toMerge;
             toSkip = mergeResult.toSkip;
+            serviceDebugLog(`去重结果: toMerge=${toMerge.length}, toSkip=${toSkip.length}`);
           });
           result.skippedRecords += toSkip.length;
 
@@ -285,10 +287,17 @@ const App: React.FC = () => {
           });
 
           // 将新写入的记录加入目标记录（用于后续源表去重）
+          // 补全所有映射字段（缺失的填 null），确保去重 key 一致
           for (const fields of toMerge) {
+            const completeFields: Record<string, unknown> = {};
+            for (const mapping of config.fieldMappings) {
+              completeFields[mapping.targetFieldId] = fields[mapping.targetFieldId] !== undefined
+                ? fields[mapping.targetFieldId]
+                : null;
+            }
             targetRecords.push({
               recordId: `new_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-              fields,
+              fields: completeFields,
             });
           }
         } catch (err: any) {

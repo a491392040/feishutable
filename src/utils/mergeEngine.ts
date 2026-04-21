@@ -30,7 +30,9 @@ export function generateRecordKey(
     for (const mapping of mappings) {
       // 源记录用 sourceFieldId 取值，目标记录用 targetFieldId 取值
       const fieldId = isSourceRecord ? mapping.sourceFieldId : mapping.targetFieldId;
-      keyObj[mapping.targetFieldId] = record.fields[fieldId];
+      // 统一处理：缺失字段当作 null，确保源记录和目标记录的 key 一致
+      const value = record.fields[fieldId];
+      keyObj[mapping.targetFieldId] = value !== undefined ? value : null;
     }
     return JSON.stringify(keyObj);
   }
@@ -40,7 +42,8 @@ export function generateRecordKey(
   for (const mapping of mappings) {
     if (config.dedupFields.includes(mapping.targetFieldId)) {
       const fieldId = isSourceRecord ? mapping.sourceFieldId : mapping.targetFieldId;
-      keyObj[mapping.targetFieldId] = record.fields[fieldId];
+      const value = record.fields[fieldId];
+      keyObj[mapping.targetFieldId] = value !== undefined ? value : null;
     }
   }
   return JSON.stringify(keyObj);
