@@ -28,6 +28,7 @@ import {
   batchCreateRecordsWithHierarchy,
   batchCreateRecords,
   getDebugLogs,
+  debugLog as serviceDebugLog,
 } from '@/services/bitableService';
 import TableSelector from '@/components/TableSelector';
 import FieldMappingConfig from '@/components/FieldMappingConfig';
@@ -185,15 +186,22 @@ const App: React.FC = () => {
       for (const sourceTableId of config.sourceTableIds) {
         const records = await getRecords(sourceTableId);
         allSourceRecordsMap.set(sourceTableId, records);
+        const parentCount = records.filter((r) => !r.parentRecordId).length;
+        const childCount = records.filter((r) => !!r.parentRecordId).length;
+        serviceDebugLog(`源表 ${sourceTableId}: 总${records.length}条, 父${parentCount}条, 子${childCount}条`);
         if (records.some((r) => r.parentRecordId)) {
           hasAnyParentChild = true;
         }
       }
+      serviceDebugLog(`hasAnyParentChild = ${hasAnyParentChild}`);
 
       // 如果源表有父子关系，确保目标表有自关联字段
       let targetLinkFieldId: string | null = null;
       if (hasAnyParentChild) {
         targetLinkFieldId = await ensureSelfLinkField(config.targetTableId);
+        serviceDebugLog(`targetLinkFieldId = ${targetLinkFieldId}`);
+      } else {
+        serviceDebugLog(`未检测到父子关系，跳过关联字段创建`);
       }
 
       // 动态导入合并引擎
@@ -238,6 +246,7 @@ const App: React.FC = () => {
           await timer.recordPhase(`写入记录: ${sourceTableName}`, async () => {
             // 检查是否存在父子关系需要处理
             const hasParentChild = sourceRecords.some((r) => r.parentRecordId);
+            serviceDebugLog(`写入阶段: hasParentChild=${hasParentChild}, targetLinkFieldId=${targetLinkFieldId}, toMerge=${toMerge.length}, toSkip=${toSkip.length}`);
 
             if (hasParentChild && targetLinkFieldId) {
               // 有父子关系：按层级顺序写入

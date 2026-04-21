@@ -3,7 +3,7 @@ import type { IFieldMeta, ITableMeta, IRecordData } from '@/types';
 
 /** 调试日志收集器 */
 export const debugLogs: string[] = [];
-function debugLog(msg: string) {
+export function debugLog(msg: string) {
   debugLogs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
   console.log('[Debug]', msg);
 }
