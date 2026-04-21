@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>关联字段写入测试</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 16px; background: #f5f6f7; }
+    .log { background: #fff; border: 1px solid #e5e6eb; border-radius: 8px; padding: 12px; margin: 8px 0; max-height: 400px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+    .log .ok { color: #52c41a; }
+    .log .err { color: #ff4d4f; }
+    .log .info { color: #3370ff; }
+    .log .warn { color: #faad14; }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; margin: 4px; }
+    .btn-primary { background: #3370ff; color: #fff; }
+    .btn-danger { background: #ff4d4f; color: #fff; }
+    .section { background: #fff; border: 1px solid #e5e6eb; border-radius: 8px; padding: 16px; margin: 8px 0; }
+    .section h3 { margin: 0 0 8px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h2>🔗 关联字段写入测试</h2>
+  <p>测试飞书多维表格中关联字段的正确写入方式</p>
+
+  <div class="section">
+    <h3>步骤 1：环境检测</h3>
+    <button class="btn-primary" onclick="testEnvironment()">检测环境</button>
+  </div>
+
+  <div class="section">
+    <h3>步骤 2：获取表信息</h3>
+    <button class="btn-primary" onclick="testGetTableInfo()">获取当前表和字段</button>
+  </div>
+
+  <div class="section">
+    <h3>步骤 3：测试关联写入（5种方式）</h3>
+    <p>请先确保当前表有<strong>自关联字段</strong>（关联到自身的单向/双向关联字段）</p>
+    <button class="btn-primary" onclick="testAllLinkMethods()">运行全部测试</button>
+    <button class="btn-danger" onclick="cleanup()">清理测试数据</button>
+  </div>
+
+  <div class="section">
+    <h3>📋 测试日志</h3>
+    <div class="log" id="log"></div>
+  </div>
+
+  <script type="module" src="/src/test-link.ts"></script>
+</body>
+</html>
