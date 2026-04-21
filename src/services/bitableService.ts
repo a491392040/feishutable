@@ -293,7 +293,7 @@ export async function batchCreateRecordsWithHierarchy(
       const newRecords = await table.addRecords(recordValues);
       // 建立源记录ID到新记录ID的映射
       for (let j = 0; j < newRecords.length; j++) {
-        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j].recordId);
+        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j]);
       }
       createdCount += newRecords.length;
     }
@@ -323,7 +323,7 @@ export async function batchCreateRecordsWithHierarchy(
 
       const newRecords = await table.addRecords(recordValues);
       for (let j = 0; j < newRecords.length; j++) {
-        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j].recordId);
+        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j]);
       }
       createdCount += newRecords.length;
     }
@@ -343,7 +343,7 @@ export async function batchCreateRecordsWithHierarchy(
       }));
       const newRecords = await table.addRecords(recordValues);
       for (let j = 0; j < newRecords.length; j++) {
-        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j].recordId);
+        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j]);
       }
       createdCount += newRecords.length;
     }

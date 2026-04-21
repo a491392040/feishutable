@@ -25,6 +25,7 @@ import {
   getTableName,
   detectSelfLinkFieldId,
   batchCreateRecordsWithHierarchy,
+  batchCreateRecords,
 } from '@/services/bitableService';
 import TableSelector from '@/components/TableSelector';
 import FieldMappingConfig from '@/components/FieldMappingConfig';
