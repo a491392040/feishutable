@@ -313,8 +313,13 @@ export async function batchCreateRecordsWithHierarchy(
         if (entry.linkFieldId && entry.sourceParentId) {
           const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
           if (newParentId) {
-            // 关联字段值格式：[recordId] 数组
-            fields[entry.linkFieldId] = [newParentId];
+            // 关联字段值必须是 IOpenLink 格式
+            fields[entry.linkFieldId] = {
+              text: '',
+              type: 'text',
+              recordIds: [newParentId],
+              tableId: tableId,
+            };
           }
         }
 
