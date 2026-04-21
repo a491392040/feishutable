@@ -193,7 +193,8 @@ export async function batchCreateRecords(
 
 /**
  * 按层级顺序创建记录（支持父子记录）
- * 策略：先添加父记录，再添加子记录，最后用 setCellValue 设置关联
+ * 方式5验证有效：在 addRecord 的 fields 中直接传入 IOpenLink 对象
+ * 策略：先批量添加父记录，再批量添加子记录（子记录的关联字段直接包含 IOpenLink 值）
  */
 export async function batchCreateRecordsWithHierarchy(
   tableId: string,
@@ -218,7 +219,7 @@ export async function batchCreateRecordsWithHierarchy(
   const childEntries = recordsWithMeta.filter((r) => !r.isParent && r.sourceParentId);
 
   // ============================================
-  // 第一步：创建所有父记录（直接添加）
+  // 第一步：创建所有父记录
   // ============================================
   if (parentEntries.length > 0) {
     const batchSize = 500;
@@ -236,52 +237,38 @@ export async function batchCreateRecordsWithHierarchy(
   }
 
   // ============================================
-  // 第二步：创建子记录并设置关联
+  // 第二步：创建所有子记录（关联字段直接用 IOpenLink 格式）
   // ============================================
   if (childEntries.length > 0) {
     const batchSize = 500;
     for (let i = 0; i < childEntries.length; i += batchSize) {
       const batch = childEntries.slice(i, i + batchSize);
+      const recordValues: IRecordValue[] = [];
 
-      // 2.1 先批量添加子记录（不包含关联字段值）
-      const recordValues: IRecordValue[] = batch.map((entry) => {
+      for (const entry of batch) {
         const fields = { ...entry.fields };
-        if (entry.linkFieldId) {
-          delete fields[entry.linkFieldId];
-        }
-        return { fields: fields as IRecordValue['fields'] };
-      });
 
-      const newRecordIds = await table.addRecords(recordValues);
-
-      // 2.2 建立源记录ID到新记录ID的映射
-      for (let j = 0; j < newRecordIds.length; j++) {
-        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
-      }
-      createdCount += newRecordIds.length;
-
-      // 2.3 逐条用 setCellValue 设置关联字段
-      for (let k = 0; k < batch.length; k++) {
-        const entry = batch[k];
-        if (!entry.linkFieldId || !entry.sourceParentId) continue;
-
-        const newChildId = sourceToNewIdMap.get(entry.sourceRecordId);
-        const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
-
-        // 只有父记录已成功添加时，才设置关联
-        if (newChildId && newParentId) {
-          try {
-            await table.setCellValue(entry.linkFieldId, newChildId, {
+        // 如果有父记录且父记录已成功添加，直接在 fields 中设置 IOpenLink 关联值
+        if (entry.linkFieldId && entry.sourceParentId) {
+          const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
+          if (newParentId) {
+            fields[entry.linkFieldId] = {
               text: '',
               type: 'text',
               recordIds: [newParentId],
               tableId: tableId,
-            } as any);
-          } catch (err) {
-            console.error(`设置关联失败: 子=${newChildId}, 父=${newParentId}`, err);
+            };
           }
         }
+
+        recordValues.push({ fields: fields as IRecordValue['fields'] });
       }
+
+      const newRecordIds = await table.addRecords(recordValues);
+      for (let j = 0; j < newRecordIds.length; j++) {
+        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
+      }
+      createdCount += newRecordIds.length;
     }
   }
 
