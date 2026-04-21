@@ -170,7 +170,7 @@ async function detectParentChildRelations(
           .map((item: any) => {
             if (typeof item === 'string') return item;
             if (item && typeof item === 'object') {
-              return item.recordId || item.link || item.id || null;
+              return item.recordId || item.record_ids?.[0] || item.link || item.id || null;
             }
             return null;
           })
@@ -178,9 +178,17 @@ async function detectParentChildRelations(
       } else if (typeof linkValue === 'string' && linkValue.startsWith('rec')) {
         parentIds = [linkValue];
       } else if (typeof linkValue === 'object' && linkValue !== null) {
-        const pid = (linkValue as any).recordId || (linkValue as any).link || (linkValue as any).id;
-        if (pid) parentIds = [pid];
+        // IOpenLink 格式: { recordIds: string[], record_ids: string[], tableId, text, type }
+        const ids = (linkValue as any).recordIds || (linkValue as any).record_ids || [];
+        if (Array.isArray(ids) && ids.length > 0) {
+          parentIds = ids;
+        } else {
+          const pid = (linkValue as any).recordId || (linkValue as any).link || (linkValue as any).id;
+          if (pid) parentIds = [pid];
+        }
       }
+
+      debugLog(`记录 ${record.recordId} 关联值类型: ${typeof linkValue}, 提取父ID: ${parentIds.length > 0 ? parentIds : '无'}`);
 
       if (parentIds.length > 0) {
         relation.parentId = parentIds[0];
