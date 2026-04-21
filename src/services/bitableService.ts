@@ -85,7 +85,7 @@ export async function getRecords(tableId: string): Promise<IRecordData[]> {
     pageToken = result.hasMore ? result.pageToken : undefined;
   } while (pageToken);
 
-  // 检测父子关系：遍历字段，找到关联到自身表的字段（即层级关系字段）
+  // 检测父子关系
   const parentChildMap = await detectParentChildRelations(tableId, records);
   if (parentChildMap) {
     for (const record of records) {
@@ -102,11 +102,6 @@ export async function getRecords(tableId: string): Promise<IRecordData[]> {
 
 /**
  * 检测记录间的父子关系
- * 多维表格的父子关系通过"关联到自身表"的字段实现
- * 子记录的关联字段值中会包含父记录的 recordId
- * @param tableId 表 ID
- * @param records 记录列表
- * @returns 父子关系映射，如果不存在关联字段则返回 null
  */
 async function detectParentChildRelations(
   tableId: string,
@@ -115,12 +110,8 @@ async function detectParentChildRelations(
   const table = await bitable.base.getTable(tableId);
   const fieldMetaList = await table.getFieldMetaList();
 
-  // 找到关联到自身表的字段（type=18 为单向关联，type=19 为双向关联）
-  // 通过 property.tableId 判断是否关联到自身表
   let selfLinkFieldId: string | null = null;
-
   for (const fieldMeta of fieldMetaList) {
-    // FieldType 18 = SingleLink, 19 = DuplexLink
     if (fieldMeta.type === 18 || fieldMeta.type === 19) {
       const property = (fieldMeta as any).property;
       if (property && property.tableId === tableId) {
@@ -130,32 +121,24 @@ async function detectParentChildRelations(
     }
   }
 
-  if (!selfLinkFieldId) {
-    return null; // 没有自关联字段，不存在父子关系
-  }
+  if (!selfLinkFieldId) return null;
 
   const relationMap = new Map<string, { parentId?: string; childIds: string[] }>();
-
-  // 初始化所有记录
   for (const record of records) {
     relationMap.set(record.recordId, { childIds: [] });
   }
 
-  // 遍历记录，解析关联字段值来建立父子关系
   for (const record of records) {
     const linkValue = record.fields[selfLinkFieldId];
     const relation = relationMap.get(record.recordId)!;
 
-    // 关联字段的值格式通常为 recordId 字符串或 [recordId] 数组
     if (linkValue) {
       let parentIds: string[] = [];
       if (Array.isArray(linkValue)) {
-        // 格式可能是 [{ text, link }, ...] 或 [recordId, ...]
         parentIds = linkValue
           .map((item: any) => {
             if (typeof item === 'string') return item;
             if (item && typeof item === 'object') {
-              // 可能是 { recordId } 或 { link } 格式
               return item.recordId || item.link || item.id || null;
             }
             return null;
@@ -169,8 +152,7 @@ async function detectParentChildRelations(
       }
 
       if (parentIds.length > 0) {
-        relation.parentId = parentIds[0]; // 取第一个作为父记录
-        // 将当前记录注册为父记录的子记录
+        relation.parentId = parentIds[0];
         for (const pid of parentIds) {
           const parentRelation = relationMap.get(pid);
           if (parentRelation) {
@@ -185,18 +167,11 @@ async function detectParentChildRelations(
 }
 
 /**
- * 批量创建记录到指定表
- * 支持按层级顺序写入：先写父记录，再写子记录，确保子记录能正确关联到父记录
- * @param tableId 表 ID
- * @param records 待写入的记录（已映射为目标字段格式）
- * @param parentChildInfo 父子关系信息：源记录ID -> { parentId?, childIds? }
- * @param sourceRecordIdMap 源记录ID到新记录ID的映射（用于子记录关联父记录）
+ * 批量创建记录到指定表（无父子关系时使用）
  */
 export async function batchCreateRecords(
   tableId: string,
   records: Record<string, unknown>[],
-  parentChildInfo?: Map<string, { parentId?: string; childIds?: string[] }>,
-  sourceRecordIdMap?: Map<string, string>,
 ): Promise<number> {
   if (records.length === 0) return 0;
 
@@ -204,51 +179,13 @@ export async function batchCreateRecords(
   const batchSize = 500;
   let createdCount = 0;
 
-  // 如果有父子关系信息，按层级顺序写入
-  if (parentChildInfo && parentChildInfo.size > 0) {
-    // 第一轮：写入没有父记录的记录（即顶层父记录）
-    const topRecords: { index: number; record: Record<string, unknown>; sourceRecordId: string }[] = [];
-    // 第二轮：写入有父记录的子记录
-    const childRecords: { index: number; record: Record<string, unknown>; sourceRecordId: string; sourceParentId: string }[] = [];
-
-    for (let i = 0; i < records.length; i++) {
-      // 通过 sourceRecordIdMap 的反向映射找到源记录ID
-      let sourceRecordId = '';
-      let sourceParentId: string | undefined;
-
-      if (sourceRecordIdMap) {
-        // 查找这个记录对应的源记录ID
-        for (const [srcId, newId] of sourceRecordIdMap.entries()) {
-          // 我们需要另一种方式来关联，因为 records 已经是映射后的字段
-          // 这里通过索引来关联
-          break;
-        }
-      }
-
-      // 简化处理：通过 parentChildInfo 的 key 集合判断
-      // 我们使用另一种策略：将记录分为有 parentId 和无 parentId 两组
-    }
-
-    // 更简洁的方案：直接分批写入，但确保父记录先于子记录写入
-    // 由于 addRecords 是批量操作，我们按批次写入
-    for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize);
-      const recordValues: IRecordValue[] = batch.map((record) => ({
-        fields: record as IRecordValue['fields'],
-      }));
-      const createdRecords = await table.addRecords(recordValues);
-      createdCount += createdRecords.length;
-    }
-  } else {
-    // 无父子关系，直接批量写入
-    for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize);
-      const recordValues: IRecordValue[] = batch.map((record) => ({
-        fields: record as IRecordValue['fields'],
-      }));
-      const createdRecords = await table.addRecords(recordValues);
-      createdCount += createdRecords.length;
-    }
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize);
+    const recordValues: IRecordValue[] = batch.map((record) => ({
+      fields: record as IRecordValue['fields'],
+    }));
+    const createdRecords = await table.addRecords(recordValues);
+    createdCount += createdRecords.length;
   }
 
   return createdCount;
@@ -256,9 +193,7 @@ export async function batchCreateRecords(
 
 /**
  * 按层级顺序创建记录（支持父子记录）
- * 先创建父记录，获取新 ID 后再创建子记录并关联
- * @param tableId 目标表 ID
- * @param recordsWithMeta 带元数据的记录列表
+ * 策略：先添加父记录，再添加子记录，最后用 setCellValue 设置关联
  */
 export async function batchCreateRecordsWithHierarchy(
   tableId: string,
@@ -267,7 +202,7 @@ export async function batchCreateRecordsWithHierarchy(
     sourceRecordId: string;
     isParent: boolean;
     sourceParentId?: string;
-    linkFieldId?: string; // 目标表中用于建立父子关系的关联字段 ID
+    linkFieldId?: string;
   }[],
 ): Promise<{ createdCount: number; sourceToNewIdMap: Map<string, string> }> {
   if (recordsWithMeta.length === 0) {
@@ -278,11 +213,13 @@ export async function batchCreateRecordsWithHierarchy(
   const sourceToNewIdMap = new Map<string, string>();
   let createdCount = 0;
 
-  // 分离父记录和子记录
+  // 分离：父记录（无 parentRecordId）、子记录（有 parentRecordId）
   const parentEntries = recordsWithMeta.filter((r) => r.isParent);
-  const childEntries = recordsWithMeta.filter((r) => !r.isParent);
+  const childEntries = recordsWithMeta.filter((r) => !r.isParent && r.sourceParentId);
 
-  // 第一步：创建所有父记录
+  // ============================================
+  // 第一步：创建所有父记录（直接添加）
+  // ============================================
   if (parentEntries.length > 0) {
     const batchSize = 500;
     for (let i = 0; i < parentEntries.length; i += batchSize) {
@@ -290,67 +227,61 @@ export async function batchCreateRecordsWithHierarchy(
       const recordValues: IRecordValue[] = batch.map((entry) => ({
         fields: entry.fields as IRecordValue['fields'],
       }));
-      const newRecords = await table.addRecords(recordValues);
-      // 建立源记录ID到新记录ID的映射
-      for (let j = 0; j < newRecords.length; j++) {
-        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j]);
+      const newRecordIds = await table.addRecords(recordValues);
+      for (let j = 0; j < newRecordIds.length; j++) {
+        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
       }
-      createdCount += newRecords.length;
+      createdCount += newRecordIds.length;
     }
   }
 
-  // 第二步：创建子记录，并更新关联字段指向新的父记录 ID
+  // ============================================
+  // 第二步：创建子记录并设置关联
+  // ============================================
   if (childEntries.length > 0) {
     const batchSize = 500;
     for (let i = 0; i < childEntries.length; i += batchSize) {
       const batch = childEntries.slice(i, i + batchSize);
-      const recordValues: IRecordValue[] = [];
 
-      for (const entry of batch) {
+      // 2.1 先批量添加子记录（不包含关联字段值）
+      const recordValues: IRecordValue[] = batch.map((entry) => {
         const fields = { ...entry.fields };
+        if (entry.linkFieldId) {
+          delete fields[entry.linkFieldId];
+        }
+        return { fields: fields as IRecordValue['fields'] };
+      });
 
-        // 如果子记录有关联字段且源父记录已映射到新 ID，则更新关联值
-        if (entry.linkFieldId && entry.sourceParentId) {
-          const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
-          if (newParentId) {
-            // 关联字段值必须是 IOpenLink 格式
-            fields[entry.linkFieldId] = {
+      const newRecordIds = await table.addRecords(recordValues);
+
+      // 2.2 建立源记录ID到新记录ID的映射
+      for (let j = 0; j < newRecordIds.length; j++) {
+        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
+      }
+      createdCount += newRecordIds.length;
+
+      // 2.3 逐条用 setCellValue 设置关联字段
+      for (let k = 0; k < batch.length; k++) {
+        const entry = batch[k];
+        if (!entry.linkFieldId || !entry.sourceParentId) continue;
+
+        const newChildId = sourceToNewIdMap.get(entry.sourceRecordId);
+        const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
+
+        // 只有父记录已成功添加时，才设置关联
+        if (newChildId && newParentId) {
+          try {
+            await table.setCellValue(entry.linkFieldId, newChildId, {
               text: '',
               type: 'text',
               recordIds: [newParentId],
               tableId: tableId,
-            };
+            } as any);
+          } catch (err) {
+            console.error(`设置关联失败: 子=${newChildId}, 父=${newParentId}`, err);
           }
         }
-
-        recordValues.push({ fields: fields as IRecordValue['fields'] });
       }
-
-      const newRecords = await table.addRecords(recordValues);
-      for (let j = 0; j < newRecords.length; j++) {
-        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j]);
-      }
-      createdCount += newRecords.length;
-    }
-  }
-
-  // 第三步：处理没有明确父子关系但存在于 recordsWithMeta 中的记录
-  // （即既不是父记录也不是子记录的普通记录）
-  const normalEntries = recordsWithMeta.filter(
-    (r) => !r.isParent && !r.sourceParentId,
-  );
-  if (normalEntries.length > 0) {
-    const batchSize = 500;
-    for (let i = 0; i < normalEntries.length; i += batchSize) {
-      const batch = normalEntries.slice(i, i + batchSize);
-      const recordValues: IRecordValue[] = batch.map((entry) => ({
-        fields: entry.fields as IRecordValue['fields'],
-      }));
-      const newRecords = await table.addRecords(recordValues);
-      for (let j = 0; j < newRecords.length; j++) {
-        sourceToNewIdMap.set(batch[j].sourceRecordId, newRecords[j]);
-      }
-      createdCount += newRecords.length;
     }
   }
 
@@ -366,15 +297,13 @@ export async function getTableName(tableId: string): Promise<string> {
 }
 
 /**
- * 检测表中是否存在自关联字段（用于建立父子关系的关联字段）
- * @returns 自关联字段 ID，如果不存在则返回 null
+ * 检测表中是否存在自关联字段
  */
 export async function detectSelfLinkFieldId(tableId: string): Promise<string | null> {
   const table = await bitable.base.getTable(tableId);
   const fieldMetaList = await table.getFieldMetaList();
 
   for (const fieldMeta of fieldMetaList) {
-    // FieldType 18 = SingleLink（单向关联）, 19 = DuplexLink（双向关联）
     if (fieldMeta.type === 18 || fieldMeta.type === 19) {
       const property = (fieldMeta as any).property;
       if (property && property.tableId === tableId) {
@@ -387,9 +316,7 @@ export async function detectSelfLinkFieldId(tableId: string): Promise<string | n
 }
 
 /**
- * 确保目标表有自关联字段（用于建立父子关系）
- * 如果不存在则自动创建一个单向关联字段
- * @returns 自关联字段 ID
+ * 确保目标表有自关联字段，如果没有则自动创建
  */
 export async function ensureSelfLinkField(tableId: string): Promise<string> {
   const existingFieldId = await detectSelfLinkFieldId(tableId);
@@ -397,11 +324,9 @@ export async function ensureSelfLinkField(tableId: string): Promise<string> {
     return existingFieldId;
   }
 
-  // 目标表没有自关联字段，自动创建一个
   const table = await bitable.base.getTable(tableId);
   const fieldName = '父记录关联';
 
-  // FieldType 18 = SingleLink
   const fieldId = await table.addField({
     type: 18 as any,
     name: fieldName,
