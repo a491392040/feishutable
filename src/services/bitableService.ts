@@ -160,7 +160,21 @@ async function detectParentChildRelations(
   }
 
   for (const record of records) {
-    const linkValue = record.fields[selfLinkFieldId];
+    // 先用 fields 中的值
+    let linkValue = record.fields[selfLinkFieldId];
+
+    // 如果 fields 中关联值为空数组，尝试用 getCellValue 单独读取
+    if (!linkValue || (typeof linkValue === 'object' && (linkValue as any).recordIds?.length === 0)) {
+      try {
+        linkValue = await table.getCellValue(selfLinkFieldId, record.recordId);
+        if (linkValue !== record.fields[selfLinkFieldId]) {
+          debugLog(`记录 ${record.recordId}: getCellValue 返回不同值: ${JSON.stringify(linkValue)}`);
+        }
+      } catch (e: any) {
+        debugLog(`记录 ${record.recordId}: getCellValue 失败: ${e.message}`);
+      }
+    }
+
     const relation = relationMap.get(record.recordId)!;
 
     if (linkValue) {
