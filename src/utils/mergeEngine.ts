@@ -5,6 +5,7 @@ import type {
   IMergeConfig,
   IPreviewRecord,
 } from '@/types';
+import { debugLog } from '@/services/bitableService';
 
 /**
  * 根据去重配置生成记录的唯一键
@@ -89,6 +90,7 @@ export function deduplicateRecords(
     const key = generateRecordKey(record, config.dedupConfig, config.fieldMappings, false);
     existingKeys.add(key);
   }
+  debugLog(`[去重] 目标+已合并记录数: ${existingRecords.length}, 去重模式: ${config.dedupConfig.mode}`);
 
   // 同时构建源记录自身的键集合（用于源表内去重）
   const sourceKeys = new Set<string>();
@@ -99,18 +101,19 @@ export function deduplicateRecords(
   for (const sourceRecord of sourceRecords) {
     // 源记录用 sourceFieldId 取值
     const key = generateRecordKey(sourceRecord, config.dedupConfig, config.fieldMappings, true);
+    const hitExisting = existingKeys.has(key);
+    const hitSource = sourceKeys.has(key);
 
-    if (existingKeys.has(key) || sourceKeys.has(key)) {
+    if (hitExisting || hitSource) {
       // 与目标表重复 或 与前面已处理的源记录重复
+      debugLog(`[去重] 跳过 ${sourceRecord.recordId} (命中${hitExisting ? '目标' : '源表'}), key=${key.slice(0, 150)}`);
       if (config.dedupConfig.strategy === 'overwrite') {
-        // 覆盖策略：仍然合并（后续写入会覆盖）
         toMerge.push(sourceRecord);
       } else {
-        // 跳过策略：跳过该记录
         toSkip.push(sourceRecord);
       }
     } else {
-      // 非重复记录，直接合并
+      debugLog(`[去重] 保留 ${sourceRecord.recordId}, key=${key.slice(0, 150)}`);
       toMerge.push(sourceRecord);
     }
 

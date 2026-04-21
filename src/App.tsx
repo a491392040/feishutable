@@ -36,7 +36,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.1.2';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
