@@ -188,6 +188,7 @@ async function detectParentChildRelations(
         }
       }
 
+      debugLog(`记录 ${record.recordId} 关联值完整结构: ${JSON.stringify(linkValue)}`);
       debugLog(`记录 ${record.recordId} 关联值类型: ${typeof linkValue}, 提取父ID: ${parentIds.length > 0 ? parentIds : '无'}`);
 
       if (parentIds.length > 0) {
