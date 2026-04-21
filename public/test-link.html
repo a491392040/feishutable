@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>关联字段写入测试</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 16px; background: #f5f6f7; }
+    .log { background: #fff; border: 1px solid #e5e6eb; border-radius: 8px; padding: 12px; margin: 8px 0; max-height: 400px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+    .log .ok { color: #52c41a; }
+    .log .err { color: #ff4d4f; }
+    .log .info { color: #3370ff; }
+    .log .warn { color: #faad14; }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; margin: 4px; }
+    .btn-primary { background: #3370ff; color: #fff; }
+    .btn-danger { background: #ff4d4f; color: #fff; }
+    .section { background: #fff; border: 1px solid #e5e6eb; border-radius: 8px; padding: 16px; margin: 8px 0; }
+    .section h3 { margin: 0 0 8px; font-size: 14px; }
+    pre { background: #f5f6f7; padding: 8px; border-radius: 4px; font-size: 12px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h2>🔗 关联字段写入方式测试</h2>
+  <p>此页面用于测试飞书多维表格 JS SDK 中关联字段的正确写入方式</p>
+
+  <div class="section">
+    <h3>步骤 1：环境检测</h3>
+    <button class="btn-primary" onclick="testEnvironment()">检测环境</button>
+  </div>
+
+  <div class="section">
+    <h3>步骤 2：获取表信息</h3>
+    <button class="btn-primary" onclick="testGetTableInfo()">获取当前表和字段</button>
+  </div>
+
+  <div class="section">
+    <h3>步骤 3：测试关联写入（5种方式）</h3>
+    <p>请先确保当前表有<strong>自关联字段</strong>（关联到自身的单向/双向关联字段）</p>
+    <button class="btn-primary" onclick="testAllLinkMethods()">运行全部测试</button>
+    <button class="btn-danger" onclick="cleanup()">清理测试数据</button>
+  </div>
+
+  <div class="section">
+    <h3>📋 测试日志</h3>
+    <div class="log" id="log"></div>
+  </div>
+
+  <script type="module">
+    import { bitable, FieldType } from '@lark-base-open/js-sdk';
+
+    // 将方法暴露到全局
+    window.bitable = bitable;
+    window.FieldType = FieldType;
+
+    const logEl = document.getElementById('log');
+    let testRecordIds = []; // 记录创建的测试记录 ID，用于清理
+
+    function log(msg, type = '') {
+      const div = document.createElement('div');
+      div.className = type;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // ========== 步骤1：环境检测 ==========
+    window.testEnvironment = async function() {
+      log('--- 环境检测 ---', 'info');
+      try {
+        log(`bitable 对象: ${bitable ? '✅ 存在' : '❌ 不存在'}`, bitable ? 'ok' : 'err');
+        log(`bitable.base: ${bitable.base ? '✅ 存在' : '❌ 不存在'}`, bitable.base ? 'ok' : 'err');
+
+        if (bitable.base) {
+          const table = await bitable.base.getActiveTable();
+          log(`当前活动表: ✅ ${table.id}`, 'ok');
+        }
+      } catch (err) {
+        log(`环境检测失败: ${err.message}`, 'err');
+        log('⚠️ 请确保在飞书多维表格的 iframe 环境中运行此页面', 'warn');
+      }
+    };
+
+    // ========== 步骤2：获取表信息 ==========
+    window.testGetTableInfo = async function() {
+      log('--- 获取表信息 ---', 'info');
+      try {
+        const table = await bitable.base.getActiveTable();
+        const name = await table.getName();
+        log(`表名: ${name} (ID: ${table.id})`);
+
+        const fieldMetaList = await table.getFieldMetaList();
+        log(`字段总数: ${fieldMetaList.length}`);
+
+        let selfLinkField = null;
+        for (const fm of fieldMetaList) {
+          const isLink = fm.type === 18 || fm.type === 19;
+          const isSelfLink = isLink && fm.property && fm.property.tableId === table.id;
+          const marker = isSelfLink ? ' 🔗[自关联]' : isLink ? ' 🔗[关联]' : '';
+          log(`  - ${fm.name} (ID: ${fm.id}, 类型: ${fm.type})${marker}`, isSelfLink ? 'warn' : '');
+
+          if (isSelfLink && !selfLinkField) {
+            selfLinkField = fm;
+          }
+        }
+
+        if (selfLinkField) {
+          log(`✅ 找到自关联字段: ${selfLinkField.name} (ID: ${selfLinkField.id})`, 'ok');
+          window._selfLinkFieldId = selfLinkField.id;
+          window._tableId = table.id;
+        } else {
+          log('❌ 未找到自关联字段！请先创建一个关联到自身的字段', 'err');
+        }
+
+        // 获取记录数
+        const recordIdList = await table.getRecordIdList();
+        log(`记录总数: ${recordIdList.length}`);
+      } catch (err) {
+        log(`获取表信息失败: ${err.message}`, 'err');
+      }
+    };
+
+    // ========== 步骤3：测试关联写入 ==========
+    window.testAllLinkMethods = async function() {
+      log('--- 开始测试关联写入 ---', 'info');
+
+      if (!window._selfLinkFieldId) {
+        log('❌ 请先运行步骤2，确保找到自关联字段', 'err');
+        return;
+      }
+
+      const table = await bitable.base.getActiveTable();
+      const linkFieldId = window._selfLinkFieldId;
+
+      try {
+        // ---- 创建两条测试记录（父 + 子）----
+        log('📝 创建测试记录...', 'info');
+        const parentResult = await table.addRecord({ fields: { [window._testTextFieldId || '']: '测试-父记录' } });
+        const parentRecordId = parentResult;
+        testRecordIds.push(parentRecordId);
+        log(`✅ 父记录已创建: ${parentRecordId}`, 'ok');
+
+        const childResult = await table.addRecord({ fields: { [window._testTextFieldId || '']: '测试-子记录' } });
+        const childRecordId = childResult;
+        testRecordIds.push(childRecordId);
+        log(`✅ 子记录已创建: ${childRecordId}`, 'ok');
+
+        // 等待一下让数据同步
+        await new Promise(r => setTimeout(r, 500));
+
+        // ---- 方式1：table.setCellValue + IOpenLink 格式 ----
+        log('', '');
+        log('【方式1】table.setCellValue(fieldId, recordId, IOpenLink对象)', 'info');
+        try {
+          await table.setCellValue(linkFieldId, childRecordId, {
+            text: '',
+            type: 'text',
+            recordIds: [parentRecordId],
+            tableId: window._tableId,
+          } as any);
+          // 验证：读取子记录的关联字段值
+          const val1 = await table.getCellValue(linkFieldId, childRecordId);
+          const hasLink1 = val1 && ((val1.recordIds && val1.recordIds.length > 0) || (Array.isArray(val1) && val1.length > 0));
+          log(`  结果: ${hasLink1 ? '✅ 成功！' : '❌ 失败'} 值: ${JSON.stringify(val1)}`, hasLink1 ? 'ok' : 'err');
+          window._workingMethod = 1;
+        } catch (err) {
+          log(`  ❌ 报错: ${err.message}`, 'err');
+        }
+
+        // 如果方式1成功了，就不需要测试其他方式了
+        // 但为了全面测试，继续测试其他方式（先清除关联）
+
+        // 清除关联
+        try {
+          await table.setCellValue(linkFieldId, childRecordId, null as any);
+          log('  (已清除关联，准备测试下一种方式)', 'info');
+          await new Promise(r => setTimeout(r, 300));
+        } catch (e) {
+          log(`  清除关联失败: ${e.message}`, 'warn');
+        }
+
+        // ---- 方式2：Field.setValue + [recordId] 数组 ----
+        log('', '');
+        log('【方式2】field.setValue(recordId, [parentRecordId])', 'info');
+        try {
+          const field = await table.getField(linkFieldId);
+          await field.setValue(childRecordId, [parentRecordId]);
+          const val2 = await table.getCellValue(linkFieldId, childRecordId);
+          const hasLink2 = val2 && ((val2.recordIds && val2.recordIds.length > 0) || (Array.isArray(val2) && val2.length > 0));
+          log(`  结果: ${hasLink2 ? '✅ 成功！' : '❌ 失败'} 值: ${JSON.stringify(val2)}`, hasLink2 ? 'ok' : 'err');
+          if (hasLink2 && !window._workingMethod) window._workingMethod = 2;
+        } catch (err) {
+          log(`  ❌ 报错: ${err.message}`, 'err');
+        }
+
+        // 清除
+        try {
+          await table.setCellValue(linkFieldId, childRecordId, null as any);
+          log('  (已清除关联)', 'info');
+          await new Promise(r => setTimeout(r, 300));
+        } catch (e) {}
+
+        // ---- 方式3：Field.createCell + addRecordByCell ----
+        log('', '');
+        log('【方式3】field.createCell([parentRecordId]) + table.addRecordByCell()', 'info');
+        try {
+          // 创建一条新记录，用 Cell 方式设置关联
+          const textField = await table.getField(window._testTextFieldId || '');
+          const textCell = await textField.createCell('测试-Cell方式子记录');
+          const linkField = await table.getField(linkFieldId);
+          const linkCell = await linkField.createCell([parentRecordId]);
+          const newRecordId = await table.addRecordByCell([textCell, linkCell]);
+          testRecordIds.push(newRecordId);
+          const val3 = await table.getCellValue(linkFieldId, newRecordId);
+          const hasLink3 = val3 && ((val3.recordIds && val3.recordIds.length > 0) || (Array.isArray(val3) && val3.length > 0));
+          log(`  结果: ${hasLink3 ? '✅ 成功！' : '❌ 失败'} 值: ${JSON.stringify(val3)}`, hasLink3 ? 'ok' : 'err');
+          if (hasLink3 && !window._workingMethod) window._workingMethod = 3;
+        } catch (err) {
+          log(`  ❌ 报错: ${err.message}`, 'err');
+        }
+
+        // ---- 方式4：addRecord + fields 中直接放 [recordId] ----
+        log('', '');
+        log('【方式4】table.addRecord({ fields: { linkFieldId: [parentRecordId] } })', 'info');
+        try {
+          const newId = await table.addRecord({
+            fields: {
+              ...(window._testTextFieldId ? { [window._testTextFieldId]: '测试-addRecord方式' } : {}),
+              [linkFieldId]: [parentRecordId],
+            }
+          } as any);
+          testRecordIds.push(newId);
+          const val4 = await table.getCellValue(linkFieldId, newId);
+          const hasLink4 = val4 && ((val4.recordIds && val4.recordIds.length > 0) || (Array.isArray(val4) && val4.length > 0));
+          log(`  结果: ${hasLink4 ? '✅ 成功！' : '❌ 失败'} 值: ${JSON.stringify(val4)}`, hasLink4 ? 'ok' : 'err');
+          if (hasLink4 && !window._workingMethod) window._workingMethod = 4;
+        } catch (err) {
+          log(`  ❌ 报错: ${err.message}`, 'err');
+        }
+
+        // ---- 方式5：addRecord + fields 中放 IOpenLink 对象 ----
+        log('', '');
+        log('【方式5】table.addRecord({ fields: { linkFieldId: IOpenLink对象 } })', 'info');
+        try {
+          const newId5 = await table.addRecord({
+            fields: {
+              ...(window._testTextFieldId ? { [window._testTextFieldId]: '测试-IOpenLink方式' } : {}),
+              [linkFieldId]: {
+                text: '',
+                type: 'text',
+                recordIds: [parentRecordId],
+                tableId: window._tableId,
+              },
+            }
+          } as any);
+          testRecordIds.push(newId5);
+          const val5 = await table.getCellValue(linkFieldId, newId5);
+          const hasLink5 = val5 && ((val5.recordIds && val5.recordIds.length > 0) || (Array.isArray(val5) && val5.length > 0));
+          log(`  结果: ${hasLink5 ? '✅ 成功！' : '❌ 失败'} 值: ${JSON.stringify(val5)}`, hasLink5 ? 'ok' : 'err');
+          if (hasLink5 && !window._workingMethod) window._workingMethod = 5;
+        } catch (err) {
+          log(`  ❌ 报错: ${err.message}`, 'err');
+        }
+
+        // ---- 总结 ----
+        log('', '');
+        log('========== 测试完成 ==========', 'info');
+        if (window._workingMethod) {
+          log(`✅ 推荐使用方式${window._workingMethod}`, 'ok');
+        } else {
+          log('❌ 所有方式均失败，请检查日志', 'err');
+        }
+
+      } catch (err) {
+        log(`测试过程出错: ${err.message}`, 'err');
+        console.error(err);
+      }
+    };
+
+    // ========== 清理 ==========
+    window.cleanup = async function() {
+      log('--- 清理测试数据 ---', 'info');
+      if (testRecordIds.length === 0) {
+        log('没有需要清理的记录', 'info');
+        return;
+      }
+
+      try {
+        const table = await bitable.base.getActiveTable();
+        for (const id of testRecordIds) {
+          try {
+            await table.deleteRecord(id);
+            log(`已删除: ${id}`, 'ok');
+          } catch (e) {
+            log(`删除失败 ${id}: ${e.message}`, 'warn');
+          }
+        }
+        testRecordIds = [];
+        log('清理完成', 'ok');
+      } catch (err) {
+        log(`清理失败: ${err.message}`, 'err');
+      }
+    };
+
+    // 自动检测文本字段 ID
+    try {
+      const table = await bitable.base.getActiveTable();
+      const fields = await table.getFieldMetaList();
+      const textField = fields.find(f => f.type === 1); // 类型1 = 文本
+      if (textField) {
+        window._testTextFieldId = textField.id;
+        log(`自动检测到文本字段: ${textField.name} (${textField.id})`, 'info');
+      }
+    } catch (e) {
+      // 不在飞书环境中，忽略
+    }
+  </script>
+</body>
+</html>
