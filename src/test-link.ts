@@ -50,8 +50,8 @@ function sleep(ms: number) {
       const isLink = (fm.type === 18 || fm.type === 19);
       const isSelfLink = isLink && (fm as any).property && (fm as any).property.tableId === table.id;
       const isText = (fm.type === 1);
-      const marker = isSelfLink ? ' 🔗[自关联]' : isLink ? ' 🔗[关联]' : '';
-      if (isText && !_textFieldId) (marker as any) += ' 📝[文本]';
+      let marker = isSelfLink ? ' 🔗[自关联]' : isLink ? ' 🔗[关联]' : '';
+      if (isText && !_textFieldId) marker += ' 📝[文本]';
       log(`  - ${fm.name} (ID: ${fm.id}, 类型: ${fm.type})${marker}`, isSelfLink ? 'warn' : '');
 
       if (isSelfLink && !_selfLinkFieldId) _selfLinkFieldId = fm.id;
