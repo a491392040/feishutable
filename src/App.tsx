@@ -239,17 +239,18 @@ const App: React.FC = () => {
 
             if (hasParentChild && targetLinkFieldId) {
               // 有父子关系：按层级顺序写入
-              // 构建待写入记录的元数据
-              const toMergeSet = new Set(toMerge);
+              // 1. 先确定哪些源记录被去重跳过了
+              const skippedRecordIds = new Set(toSkip.map((r) => r.recordId));
+              // 2. 构建源记录 ID -> 映射后字段的查找表
+              const mappedFieldsMap = new Map<string, Record<string, unknown>>();
+              for (const r of sourceRecords) {
+                mappedFieldsMap.set(r.recordId, mapSingleRecord(r, config));
+              }
+              // 3. 构建待写入记录的元数据（排除被去重跳过的记录）
               const recordsWithMeta = sourceRecords
-                .filter((r) => {
-                  // 只处理待合并的记录
-                  const mapped = mapSingleRecord(r, config);
-                  const key = JSON.stringify(mapped);
-                  return toMergeSet.has(mapped) || toMerge.some((m) => JSON.stringify(m) === key);
-                })
+                .filter((r) => !skippedRecordIds.has(r.recordId))
                 .map((r) => ({
-                  fields: mapSingleRecord(r, config),
+                  fields: mappedFieldsMap.get(r.recordId)!,
                   sourceRecordId: r.recordId,
                   isParent: !r.parentRecordId,
                   sourceParentId: r.parentRecordId,
