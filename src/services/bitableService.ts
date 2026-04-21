@@ -218,6 +218,14 @@ export async function batchCreateRecordsWithHierarchy(
   const parentEntries = recordsWithMeta.filter((r) => r.isParent);
   const childEntries = recordsWithMeta.filter((r) => !r.isParent && r.sourceParentId);
 
+  console.log(`[Hierarchy] 总记录: ${recordsWithMeta.length}, 父记录: ${parentEntries.length}, 子记录: ${childEntries.length}`);
+  if (parentEntries.length > 0) {
+    console.log(`[Hierarchy] 父记录示例:`, JSON.stringify(parentEntries[0].fields).slice(0, 200));
+  }
+  if (childEntries.length > 0) {
+    console.log(`[Hierarchy] 子记录示例:`, JSON.stringify(childEntries[0].fields).slice(0, 200));
+  }
+
   // ============================================
   // 第一步：创建所有父记录
   // ============================================
@@ -229,6 +237,7 @@ export async function batchCreateRecordsWithHierarchy(
         fields: entry.fields as IRecordValue['fields'],
       }));
       const newRecordIds = await table.addRecords(recordValues);
+      console.log(`[Hierarchy] 父记录创建成功: ${newRecordIds.length} 条, IDs:`, newRecordIds);
       for (let j = 0; j < newRecordIds.length; j++) {
         sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
       }
