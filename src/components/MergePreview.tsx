@@ -77,7 +77,14 @@ const MergePreview: React.FC<IMergePreviewProps> = ({
           totalChild += sourceRecords.filter((r) => r.parentRecordId).length;
 
           // 计算合并数据
-          const { toMerge, toSkip } = mergeData(sourceRecords, targetRecords, mergeConfig);
+          // 过滤出只属于当前源表的字段映射（避免其他源表的映射干扰去重 key）
+          const sourceFieldIds = new Set(Object.keys(sourceRecords[0]?.fields || {}));
+          const currentMappings = mergeConfig.fieldMappings.filter(
+            (m) => sourceFieldIds.has(m.sourceFieldId)
+          );
+          const currentConfig = { ...mergeConfig, fieldMappings: currentMappings };
+
+          const { toMerge, toSkip } = mergeData(sourceRecords, targetRecords, currentConfig);
           totalMerge += toMerge.length;
           totalSkip += toSkip.length;
 
@@ -85,7 +92,7 @@ const MergePreview: React.FC<IMergePreviewProps> = ({
           const preview = generatePreview(
             sourceRecords,
             targetRecords,
-            mergeConfig,
+            currentConfig,
             sourceTableName,
           );
           allPreviewRecords = allPreviewRecords.concat(preview);
