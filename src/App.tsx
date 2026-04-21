@@ -33,7 +33,8 @@ import FieldMappingConfig from '@/components/FieldMappingConfig';
 import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
-/** 默认去重配置 */
+/** 版本号 - 每次修复后递增 */
+const APP_VERSION = 'v1.0.4';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -487,7 +488,7 @@ const App: React.FC = () => {
       <div className="app-container">
         {/* 头部 */}
         <div className="app-header">
-          <h2 className="app-title">多维表格合并</h2>
+          <h2 className="app-title">多维表格合并 <span className="app-version">{APP_VERSION}</span></h2>
           <Button
             icon={<ReloadOutlined />}
             size="small"
