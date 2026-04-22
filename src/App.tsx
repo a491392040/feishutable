@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ConfigProvider, Steps, Button, message, Spin, Switch, Card, Typography } from 'antd';
+import { bitable } from '@lark-base-open/js-sdk';
+import { ConfigProvider, Steps, Button, message, Spin, Switch, Card, Typography, Input } from 'antd';
 import {
   TableOutlined,
   SwapOutlined,
@@ -38,7 +39,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.3.3';
+const APP_VERSION = 'v1.3.4';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -104,6 +105,8 @@ const App: React.FC = () => {
   const [dedupConfig, setDedupConfig] = useState<IDedupConfig>(defaultDedupConfig);
   /** 仅生成参数（不执行写入） */
   const [dryRun, setDryRun] = useState(false);
+  /** PersonalBaseToken（dryRun 模式使用） */
+  const [personalBaseTokenValue, setPersonalBaseTokenValue] = useState('');
   /** 合并结果 */
   const [mergeResult, setMergeResult] = useState<IMergeResult | null>(null);
   /** 是否正在合并 */
@@ -166,11 +169,19 @@ const App: React.FC = () => {
 
     // dryRun 模式：仅生成配置参数，不执行任何数据操作
     if (config.dryRun) {
-      let appToken = '';
+      // 通过 SDK 获取 baseId
+      let baseId = '';
       try {
-        const match = window.location.pathname.match(/\/base\/([a-zA-Z0-9]+)/);
-        appToken = match ? match[1] : '';
+        const selection = await bitable.base.getSelection();
+        baseId = selection?.baseId || '';
       } catch { /* ignore */ }
+      // fallback: 从 URL 提取
+      if (!baseId) {
+        try {
+          const match = window.location.pathname.match(/\/base\/([a-zA-Z0-9]+)/);
+          baseId = match ? match[1] : '';
+        } catch { /* ignore */ }
+      }
 
       // 收集去重字段名
       const dedupFieldNames: string[] = [];
@@ -185,8 +196,8 @@ const App: React.FC = () => {
       }
 
       const dryRunData = {
-        baseId: appToken,
-        personalBaseToken: '', // 需用户手动填入
+        baseId,
+        personalBaseToken: personalBaseTokenValue || '', // 需用户手动填入
         sourceTables: config.sourceTableIds.map((id) => ({
           tableId: id,
           tableName: tables.find((t) => t.id === id)?.name || id,
@@ -481,6 +492,7 @@ const App: React.FC = () => {
     setFieldMappings([]);
     setDedupConfig(defaultDedupConfig);
     setDryRun(false);
+    setPersonalBaseTokenValue('');
     setMergeResult(null);
     setMerging(false);
     setProgressText('');
@@ -561,6 +573,23 @@ const App: React.FC = () => {
                 </div>
                 <Switch checked={dryRun} onChange={setDryRun} />
               </div>
+              {dryRun && (
+                <div style={{ marginTop: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    PersonalBaseToken（
+                    <a href="https://feishu.feishu.cn/docx/RlrpdAGwnoONCaxmIVQcD7MZnug" target="_blank" rel="noopener noreferrer">
+                      获取方式
+                    </a>
+                    ）
+                  </Text>
+                  <Input.Password
+                    placeholder="请输入 PersonalBaseToken"
+                    value={personalBaseTokenValue}
+                    onChange={(e) => setPersonalBaseTokenValue(e.target.value)}
+                    style={{ marginTop: 4 }}
+                  />
+                </div>
+              )}
             </Card>
           </div>
         );
