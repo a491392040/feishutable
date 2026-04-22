@@ -101,8 +101,8 @@ export interface IMergeTimings {
  * 供服务端 @lark-base-open/node-sdk 使用
  */
 export interface IDryRunData {
-  /** Base 文档 ID (AppToken) */
-  appToken: string;
+  /** Base 文档 ID（即 base_id / appToken） */
+  baseId: string;
   /** PersonalBaseToken（用户需手动填入） */
   personalBaseToken: string;
   /** 源表列表 */

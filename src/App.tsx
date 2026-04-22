@@ -38,7 +38,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.3.2';
+const APP_VERSION = 'v1.3.3';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -185,7 +185,7 @@ const App: React.FC = () => {
       }
 
       const dryRunData = {
-        appToken,
+        baseId: appToken,
         personalBaseToken: '', // 需用户手动填入
         sourceTables: config.sourceTableIds.map((id) => ({
           tableId: id,
