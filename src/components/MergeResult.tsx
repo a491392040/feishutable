@@ -308,9 +308,7 @@ const DryRunParams: React.FC<{ data: IMergeResult['dryRunData'] }> = ({ data }) 
     >
       <div style={{ marginBottom: 8 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          共 {data.toMergeRecords.length} 条待合并记录，
-          {data.parentChildRelations.length > 0 && ` ${data.parentChildRelations.length} 条父子关系，`}
-          可复制此 JSON 供服务端脚本使用
+          此 JSON 包含合并配置指令，供服务端脚本通过 SDK 执行合并操作
         </Text>
       </div>
       <pre

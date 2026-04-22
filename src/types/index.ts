@@ -97,7 +97,7 @@ export interface IMergeTimings {
 }
 
 /**
- * dryRun 模式生成的参数数据
+ * dryRun 模式生成的参数数据（仅配置指令，不含实际数据）
  */
 export interface IDryRunData {
   /** Base 文档 ID (AppToken) */
@@ -110,18 +110,6 @@ export interface IDryRunData {
   fieldMappings: IFieldMapping[];
   /** 去重配置 */
   dedupConfig: IDedupConfig;
-  /** 待合并的记录数据（映射后的字段值） */
-  toMergeRecords: {
-    fields: Record<string, unknown>;
-    sourceRecordId: string;
-    isParent: boolean;
-    sourceParentId?: string;
-  }[];
-  /** 父子关系映射 */
-  parentChildRelations: {
-    sourceRecordId: string;
-    sourceParentId: string;
-  }[];
 }
 
 /**
