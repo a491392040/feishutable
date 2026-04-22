@@ -36,7 +36,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.2.2';
+const APP_VERSION = 'v1.2.3';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -535,11 +535,10 @@ const App: React.FC = () => {
           </Button>
         </div>
 
-        {/* 步骤条（横向紧凑） */}
+        {/* 步骤条 */}
         <Steps
-          direction="horizontal"
           current={currentStep}
-          items={steps.map((s) => ({ title: s.title, icon: s.icon }))}
+          items={steps}
           size="small"
           className="app-steps"
         />
