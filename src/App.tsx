@@ -36,7 +36,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.1.4';
+const APP_VERSION = 'v1.2.0';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -457,8 +457,9 @@ const App: React.FC = () => {
             selectedIds={sourceTableIds}
             mode="multiple"
             title="选择源表"
-            description="请选择一个或多个需要合并的数据表作为数据来源"
+            description="请选择一个或多个需要合并的数据表作为数据来源，或使用关键字快速匹配"
             onChange={setSourceTableIds}
+            showKeywordSearch
           />
         );
       case 1:
