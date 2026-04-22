@@ -64,6 +64,8 @@ export interface IMergeConfig {
   fieldMappings: IFieldMapping[];
   /** 去重配置 */
   dedupConfig: IDedupConfig;
+  /** 是否仅生成参数（不执行写入） */
+  dryRun?: boolean;
 }
 
 /**
@@ -95,6 +97,34 @@ export interface IMergeTimings {
 }
 
 /**
+ * dryRun 模式生成的参数数据
+ */
+export interface IDryRunData {
+  /** Base 文档 ID (AppToken) */
+  appToken: string;
+  /** 源表 ID 列表 */
+  sourceTableIds: string[];
+  /** 目标表 ID */
+  targetTableId: string;
+  /** 字段映射关系 */
+  fieldMappings: IFieldMapping[];
+  /** 去重配置 */
+  dedupConfig: IDedupConfig;
+  /** 待合并的记录数据（映射后的字段值） */
+  toMergeRecords: {
+    fields: Record<string, unknown>;
+    sourceRecordId: string;
+    isParent: boolean;
+    sourceParentId?: string;
+  }[];
+  /** 父子关系映射 */
+  parentChildRelations: {
+    sourceRecordId: string;
+    sourceParentId: string;
+  }[];
+}
+
+/**
  * 合并结果
  */
 export interface IMergeResult {
@@ -114,6 +144,8 @@ export interface IMergeResult {
   debugMessages?: string[];
   /** 耗时统计 */
   timings?: IMergeTimings;
+  /** dryRun 模式生成的参数数据 */
+  dryRunData?: IDryRunData;
 }
 
 /**

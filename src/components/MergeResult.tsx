@@ -1,5 +1,5 @@
-import React from 'react';
-import { Card, Statistic, Tag, Typography, Space, Table, Timeline, Progress } from 'antd';
+import React, { useState } from 'react';
+import { Card, Statistic, Tag, Typography, Space, Table, Timeline, Progress, Button } from 'antd';
 import {
   CheckCircleOutlined,
   WarningOutlined,
@@ -7,8 +7,11 @@ import {
   ClockCircleOutlined,
   NodeIndexOutlined,
   BugOutlined,
+  CopyOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
 import type { IMergeResult, ITimeRecord } from '@/types';
+import { message } from 'antd';
 
 const { Text, Title } = Typography;
 
@@ -248,7 +251,86 @@ const MergeResult: React.FC<IMergeResultProps> = ({ result }) => {
           </div>
         </Card>
       )}
+
+      {/* dryRun 参数 JSON */}
+      {result.dryRunData && <DryRunParams data={result.dryRunData} />}
     </div>
+  );
+};
+
+/** dryRun 参数 JSON 展示组件 */
+const DryRunParams: React.FC<{ data: IMergeResult['dryRunData'] }> = ({ data }) => {
+  if (!data) return null;
+
+  const [copied, setCopied] = useState(false);
+  const jsonStr = JSON.stringify(data, null, 2);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(jsonStr);
+      setCopied(true);
+      message.success('已复制到剪贴板');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const textarea = document.createElement('textarea');
+      textarea.value = jsonStr;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      message.success('已复制到剪贴板');
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <Card
+      title={
+        <Space>
+          <CodeOutlined style={{ color: '#722ed1' }} />
+          合并参数 JSON
+          <Tag color="purple">仅生成参数</Tag>
+        </Space>
+      }
+      size="small"
+      extra={
+        <Button
+          type="primary"
+          size="small"
+          icon={<CopyOutlined />}
+          onClick={handleCopy}
+        >
+          {copied ? '已复制' : '复制 JSON'}
+        </Button>
+      }
+    >
+      <div style={{ marginBottom: 8 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          共 {data.toMergeRecords.length} 条待合并记录，
+          {data.parentChildRelations.length > 0 && ` ${data.parentChildRelations.length} 条父子关系，`}
+          可复制此 JSON 供服务端脚本使用
+        </Text>
+      </div>
+      <pre
+        style={{
+          maxHeight: 400,
+          overflow: 'auto',
+          fontSize: 11,
+          fontFamily: 'monospace',
+          background: '#f5f6f7',
+          padding: 12,
+          borderRadius: 4,
+          lineHeight: '1.6',
+          wordBreak: 'break-all',
+          whiteSpace: 'pre-wrap',
+          margin: 0,
+        }}
+      >
+        {jsonStr}
+      </pre>
+    </Card>
   );
 };
 

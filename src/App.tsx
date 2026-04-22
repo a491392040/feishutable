@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ConfigProvider, Steps, Button, message, Spin } from 'antd';
+import { ConfigProvider, Steps, Button, message, Spin, Switch, Card, Typography } from 'antd';
 import {
   TableOutlined,
   SwapOutlined,
@@ -32,11 +32,13 @@ import {
 } from '@/services/bitableService';
 import TableSelector from '@/components/TableSelector';
 import FieldMappingConfig from '@/components/FieldMappingConfig';
+
+const { Text } = Typography;
 import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.2.4';
+const APP_VERSION = 'v1.3.0';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -100,6 +102,8 @@ const App: React.FC = () => {
   const [fieldMappings, setFieldMappings] = useState<IFieldMapping[]>([]);
   /** 去重配置 */
   const [dedupConfig, setDedupConfig] = useState<IDedupConfig>(defaultDedupConfig);
+  /** 仅生成参数（不执行写入） */
+  const [dryRun, setDryRun] = useState(false);
   /** 合并结果 */
   const [mergeResult, setMergeResult] = useState<IMergeResult | null>(null);
   /** 是否正在合并 */
@@ -145,8 +149,9 @@ const App: React.FC = () => {
       targetTableId,
       fieldMappings,
       dedupConfig,
+      dryRun,
     };
-  }, [sourceTableIds, targetTableId, fieldMappings, dedupConfig]);
+  }, [sourceTableIds, targetTableId, fieldMappings, dedupConfig, dryRun]);
 
   /** 执行合并操作（含耗时统计和父记录支持） */
   const handleExecuteMerge = useCallback(async () => {
@@ -201,9 +206,11 @@ const App: React.FC = () => {
 
       // 如果源表有父子关系，确保目标表有自关联字段
       let targetLinkFieldId: string | null = null;
-      if (hasAnyParentChild) {
+      if (hasAnyParentChild && !config.dryRun) {
         targetLinkFieldId = await ensureSelfLinkField(config.targetTableId);
         serviceDebugLog(`targetLinkFieldId = ${targetLinkFieldId}`);
+      } else if (hasAnyParentChild && config.dryRun) {
+        serviceDebugLog(`dryRun 模式，跳过创建自关联字段`);
       } else {
         serviceDebugLog(`未检测到父子关系，跳过关联字段创建`);
       }
@@ -254,14 +261,54 @@ const App: React.FC = () => {
 
           if (toMerge.length === 0) continue;
 
-          // 阶段4：写入记录
-          setProgressText(`正在写入记录 (${sourceTableName}, ${toMerge.length} 条)...`);
-          await timer.recordPhase(`写入记录: ${sourceTableName}`, async () => {
+          // 阶段4：写入记录（或 dryRun 收集参数）
+          setProgressText(config.dryRun
+            ? `正在生成参数 (${sourceTableName}, ${toMerge.length} 条)...`
+            : `正在写入记录 (${sourceTableName}, ${toMerge.length} 条)...`
+          );
+          await timer.recordPhase(config.dryRun ? `生成参数: ${sourceTableName}` : `写入记录: ${sourceTableName}`, async () => {
             // 检查是否存在父子关系需要处理
             const hasParentChild = sourceRecords.some((r) => r.parentRecordId);
             serviceDebugLog(`写入阶段: hasParentChild=${hasParentChild}, targetLinkFieldId=${targetLinkFieldId}, toMerge=${toMerge.length}, toSkip=${toSkip.length}`);
 
-            if (hasParentChild && targetLinkFieldId) {
+            if (config.dryRun) {
+              // dryRun 模式：收集映射后的记录数据，不执行写入
+              const skippedRecordIds = new Set(toSkip.map((r) => r.recordId));
+              const mappedRecords = sourceRecords
+                .filter((r) => !skippedRecordIds.has(r.recordId))
+                .map((r) => ({
+                  fields: mapSingleRecord(r, config),
+                  sourceRecordId: r.recordId,
+                  isParent: !r.parentRecordId,
+                  sourceParentId: r.parentRecordId,
+                }));
+              result.mergedRecords += mappedRecords.length;
+              // 存储到 result 的 dryRunData 中
+              if (!result.dryRunData) {
+                result.dryRunData = {
+                  appToken: '',
+                  sourceTableIds: [],
+                  targetTableId: config.targetTableId,
+                  fieldMappings: config.fieldMappings,
+                  dedupConfig: config.dedupConfig,
+                  toMergeRecords: [],
+                  parentChildRelations: [],
+                };
+              }
+              result.dryRunData.toMergeRecords.push(...mappedRecords);
+              result.dryRunData.sourceTableIds.push(sourceTableId);
+              // 收集父子关系
+              if (hasParentChild) {
+                for (const r of sourceRecords) {
+                  if (r.parentRecordId) {
+                    result.dryRunData.parentChildRelations.push({
+                      sourceRecordId: r.recordId,
+                      sourceParentId: r.parentRecordId,
+                    });
+                  }
+                }
+              }
+            } else if (hasParentChild && targetLinkFieldId) {
               // 有父子关系：按层级顺序写入
               // 1. 先确定哪些源记录被去重跳过了
               const skippedRecordIds = new Set(toSkip.map((r) => r.recordId));
@@ -324,12 +371,26 @@ const App: React.FC = () => {
         result.debugMessages = logs;
       }
 
+      // dryRun 模式：填充 appToken（从 URL 提取）
+      if (config.dryRun && result.dryRunData) {
+        try {
+          const match = window.location.pathname.match(/\/base\/([a-zA-Z0-9]+)/);
+          result.dryRunData.appToken = match ? match[1] : '';
+        } catch {
+          result.dryRunData.appToken = '';
+        }
+      }
+
       setMergeResult(result);
 
       if (result.errorMessages.length === 0) {
-        message.success(
-          `合并完成！成功 ${result.mergedRecords} 条，跳过 ${result.skippedRecords} 条，耗时 ${formatDuration(timings.totalDuration)}`,
-        );
+        if (config.dryRun) {
+          message.success(`参数生成完成！共 ${result.mergedRecords} 条待合并记录，耗时 ${formatDuration(timings.totalDuration)}`);
+        } else {
+          message.success(
+            `合并完成！成功 ${result.mergedRecords} 条，跳过 ${result.skippedRecords} 条，耗时 ${formatDuration(timings.totalDuration)}`,
+          );
+        }
       } else if (result.mergedRecords > 0) {
         message.warning(`合并部分完成，有 ${result.errorMessages.length} 个错误`);
       } else {
@@ -418,6 +479,7 @@ const App: React.FC = () => {
     setTargetTableId('');
     setFieldMappings([]);
     setDedupConfig(defaultDedupConfig);
+    setDryRun(false);
     setMergeResult(null);
     setMerging(false);
     setProgressText('');
@@ -487,6 +549,18 @@ const App: React.FC = () => {
               targetTable={tables.find((t) => t.id === targetTableId) || null}
               onChange={setDedupConfig}
             />
+            <Card size="small" style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <Text strong>仅生成参数</Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    开启后不执行写入操作，仅生成合并参数 JSON，供服务端脚本调用
+                  </Text>
+                </div>
+                <Switch checked={dryRun} onChange={setDryRun} />
+              </div>
+            </Card>
           </div>
         );
       case 3:
