@@ -537,6 +537,7 @@ const App: React.FC = () => {
 
         {/* 步骤条（横向紧凑） */}
         <Steps
+          direction="horizontal"
           current={currentStep}
           items={steps.map((s) => ({ title: s.title, icon: s.icon }))}
           size="small"
