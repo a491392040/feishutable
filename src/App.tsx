@@ -38,7 +38,7 @@ import DedupConfig from '@/components/DedupConfig';
 import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.3.1';
+const APP_VERSION = 'v1.3.2';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -172,12 +172,38 @@ const App: React.FC = () => {
         appToken = match ? match[1] : '';
       } catch { /* ignore */ }
 
+      // 收集去重字段名
+      const dedupFieldNames: string[] = [];
+      if (config.dedupConfig.enabled && config.dedupConfig.mode === 'specified_fields') {
+        for (const fieldId of config.dedupConfig.dedupFields) {
+          const mapping = config.fieldMappings.find((m) => m.targetFieldId === fieldId);
+          if (mapping) dedupFieldNames.push(mapping.targetFieldName);
+        }
+      } else if (config.dedupConfig.enabled && config.dedupConfig.mode === 'all_fields') {
+        // 全字段去重：使用所有目标字段名
+        dedupFieldNames.push(...config.fieldMappings.map((m) => m.targetFieldName));
+      }
+
       const dryRunData = {
         appToken,
-        sourceTableIds: config.sourceTableIds,
-        targetTableId: config.targetTableId,
-        fieldMappings: config.fieldMappings,
-        dedupConfig: config.dedupConfig,
+        personalBaseToken: '', // 需用户手动填入
+        sourceTables: config.sourceTableIds.map((id) => ({
+          tableId: id,
+          tableName: tables.find((t) => t.id === id)?.name || id,
+        })),
+        targetTable: {
+          tableId: config.targetTableId,
+          tableName: tables.find((t) => t.id === config.targetTableId)?.name || config.targetTableId,
+        },
+        fieldMappings: config.fieldMappings.map((m) => ({
+          sourceFieldName: m.sourceFieldName,
+          targetFieldName: m.targetFieldName,
+        })),
+        dedupConfig: {
+          enabled: config.dedupConfig.enabled,
+          dedupFieldNames,
+          strategy: config.dedupConfig.strategy,
+        },
       };
 
       setMergeResult({

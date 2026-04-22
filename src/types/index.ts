@@ -98,18 +98,43 @@ export interface IMergeTimings {
 
 /**
  * dryRun 模式生成的参数数据（仅配置指令，不含实际数据）
+ * 供服务端 @lark-base-open/node-sdk 使用
  */
 export interface IDryRunData {
   /** Base 文档 ID (AppToken) */
   appToken: string;
-  /** 源表 ID 列表 */
-  sourceTableIds: string[];
-  /** 目标表 ID */
-  targetTableId: string;
-  /** 字段映射关系 */
-  fieldMappings: IFieldMapping[];
+  /** PersonalBaseToken（用户需手动填入） */
+  personalBaseToken: string;
+  /** 源表列表 */
+  sourceTables: {
+    /** 表 ID */
+    tableId: string;
+    /** 表名 */
+    tableName: string;
+  }[];
+  /** 目标表 */
+  targetTable: {
+    /** 表 ID */
+    tableId: string;
+    /** 表名 */
+    tableName: string;
+  };
+  /** 字段映射关系（SDK 使用字段名操作） */
+  fieldMappings: {
+    /** 源字段名 */
+    sourceFieldName: string;
+    /** 目标字段名 */
+    targetFieldName: string;
+  }[];
   /** 去重配置 */
-  dedupConfig: IDedupConfig;
+  dedupConfig: {
+    /** 是否启用 */
+    enabled: boolean;
+    /** 去重字段名列表（SDK 使用字段名） */
+    dedupFieldNames: string[];
+    /** 去重策略：skip=跳过重复, overwrite=覆盖 */
+    strategy: 'skip' | 'overwrite';
+  };
 }
 
 /**
