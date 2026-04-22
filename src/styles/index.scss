@@ -108,18 +108,54 @@ body {
   background-color: var(--bg-primary);
   flex-shrink: 0;
 
+  // 强制横向排列（覆盖 antd 响应式断点）
+  &.ant-steps {
+    display: flex;
+    flex-direction: row !important;
+  }
+
+  .ant-steps-item {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .ant-steps-item-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .ant-steps-item-content {
+    display: flex;
+    flex-direction: column;
+    min-height: auto;
+  }
+
   .ant-steps-item-title {
     font-size: 13px !important;
+    line-height: 22px !important;
   }
 
   .ant-steps-item-description {
     font-size: 11px !important;
+    padding-top: 0 !important;
   }
 
   .ant-steps-item-icon {
     width: 22px !important;
     height: 22px !important;
     font-size: 11px !important;
+    margin-inline-end: 8px !important;
+  }
+
+  .ant-steps-item-tail {
+    position: absolute;
+    top: 11px;
+    left: 0;
+    width: 100%;
+    padding: 0;
+    margin-left: 22px;
   }
 }
 
