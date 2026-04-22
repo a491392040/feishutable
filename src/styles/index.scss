@@ -74,18 +74,19 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+  gap: 16px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-primary);
   flex-shrink: 0;
 }
 
 .app-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  white-space: nowrap;
 
   .app-version {
     font-size: 11px;
@@ -98,21 +99,24 @@ body {
   }
 }
 
-/* ===========================
-   步骤条
-   =========================== */
-.app-steps {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-primary);
-  flex-shrink: 0;
+/* 内联步骤条（嵌入 header） */
+.app-steps-inline {
+  flex: 1;
+  max-width: 520px;
 
   .ant-steps-item-title {
-    font-size: 13px !important;
+    font-size: 12px !important;
+    padding-inline-end: 8px !important;
+  }
+
+  .ant-steps-item-icon {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 12px !important;
   }
 
   .ant-steps-item-description {
-    font-size: 11px !important;
+    display: none !important;
   }
 }
 
@@ -633,6 +637,29 @@ body {
 
 /* 适配小屏幕（边栏宽度较窄） */
 @media (max-width: 480px) {
+  .app-header {
+    gap: 8px;
+    padding: 6px 12px;
+  }
+
+  .app-title {
+    font-size: 13px;
+  }
+
+  .app-steps-inline {
+    max-width: 200px;
+
+    .ant-steps-item-title {
+      font-size: 11px !important;
+    }
+
+    .ant-steps-item-icon {
+      width: 20px !important;
+      height: 20px !important;
+      font-size: 10px !important;
+    }
+  }
+
   .app-content {
     padding: 12px;
   }
