@@ -523,15 +523,9 @@ const App: React.FC = () => {
       }}
     >
       <div className="app-container">
-        {/* 头部：标题 + 紧凑步骤条 + 重置 */}
+        {/* 头部 */}
         <div className="app-header">
           <h2 className="app-title">多维表格合并 <span className="app-version">{APP_VERSION}</span></h2>
-          <Steps
-            current={currentStep}
-            items={steps.map((s) => ({ title: s.title, icon: s.icon }))}
-            size="small"
-            className="app-steps-inline"
-          />
           <Button
             icon={<ReloadOutlined />}
             size="small"
@@ -540,6 +534,14 @@ const App: React.FC = () => {
             重置
           </Button>
         </div>
+
+        {/* 步骤条（横向紧凑） */}
+        <Steps
+          current={currentStep}
+          items={steps.map((s) => ({ title: s.title, icon: s.icon }))}
+          size="small"
+          className="app-steps"
+        />
 
         {/* 步骤内容 */}
         <div className="app-content">
