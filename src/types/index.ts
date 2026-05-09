@@ -32,6 +32,8 @@ export interface IFieldMapping {
   sourceFieldId: string;
   /** 源字段名称 */
   sourceFieldName: string;
+  /** 源表名称（用于区分不同源表的同ID字段） */
+  sourceTableName: string;
   /** 目标字段 ID */
   targetFieldId: string;
   /** 目标字段名称 */

@@ -312,9 +312,8 @@ const App: React.FC = () => {
           await timer.recordPhase(`去重计算: ${sourceTableName}`, async () => {
             serviceDebugLog(`去重: 源表${sourceTableName} ${sourceRecords.length}条 vs 目标表+已合并 ${targetRecords.length}条`);
             // 过滤出只属于当前源表的字段映射（避免其他源表的映射干扰去重 key）
-            const sourceFieldIds = new Set(Object.keys(sourceRecords[0]?.fields || {}));
             const currentMappings = config.fieldMappings.filter(
-              (m) => sourceFieldIds.has(m.sourceFieldId)
+              (m) => m.sourceTableName === sourceTableName
             );
             const currentConfig = { ...config, fieldMappings: currentMappings };
             serviceDebugLog(`去重: 当前源表映射数 ${currentMappings.length}, 总映射数 ${config.fieldMappings.length}`);

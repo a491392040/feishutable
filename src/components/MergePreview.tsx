@@ -78,9 +78,8 @@ const MergePreview: React.FC<IMergePreviewProps> = ({
 
           // 计算合并数据
           // 过滤出只属于当前源表的字段映射（避免其他源表的映射干扰去重 key）
-          const sourceFieldIds = new Set(Object.keys(sourceRecords[0]?.fields || {}));
           const currentMappings = mergeConfig.fieldMappings.filter(
-            (m) => sourceFieldIds.has(m.sourceFieldId)
+            (m) => m.sourceTableName === sourceTableName
           );
           const currentConfig = { ...mergeConfig, fieldMappings: currentMappings };
 

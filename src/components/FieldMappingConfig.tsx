@@ -16,19 +16,25 @@ interface IFieldMappingConfigProps {
   onMappingsChange: (mappings: IFieldMapping[]) => void;
 }
 
+/**
+ * 生成源字段的唯一复合键（fieldId + tableName），用于区分不同源表的同ID字段
+ */
+const sourceFieldKey = (fieldId: string, tableName: string) => `${fieldId}@${tableName}`;
+
 const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
   sourceTables,
   targetTable,
   mappings,
   onMappingsChange,
 }) => {
-  /** 收集所有源表字段（去重） */
+  /** 收集所有源表字段（用 id+tableName 去重，支持不同源表的同名字段） */
   const allSourceFields = useMemo(() => {
     const fieldMap = new Map<string, { id: string; name: string; tableName: string }>();
     for (const table of sourceTables) {
       for (const field of table.fields) {
-        if (!fieldMap.has(field.id)) {
-          fieldMap.set(field.id, {
+        const key = sourceFieldKey(field.id, table.name);
+        if (!fieldMap.has(key)) {
+          fieldMap.set(key, {
             id: field.id,
             name: field.name,
             tableName: table.name,
@@ -39,9 +45,9 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
     return Array.from(fieldMap.values());
   }, [sourceTables]);
 
-  /** 已映射的源字段 ID 集合 */
-  const mappedSourceFieldIds = useMemo(() => {
-    return new Set(mappings.map((m) => m.sourceFieldId));
+  /** 已映射的源字段复合键集合（用 id@tableName 区分不同源表的同ID字段） */
+  const mappedSourceFieldKeys = useMemo(() => {
+    return new Set(mappings.map((m) => sourceFieldKey(m.sourceFieldId, m.sourceTableName)));
   }, [mappings]);
 
   /** 已映射的目标字段 ID 集合 */
@@ -64,6 +70,7 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
         autoMappings.push({
           sourceFieldId: sourceField.id,
           sourceFieldName: sourceField.name,
+          sourceTableName: sourceField.tableName,
           targetFieldId: matchTargetField.id,
           targetFieldName: matchTargetField.name,
         });
@@ -79,9 +86,9 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
 
   /** 添加映射 */
   const handleAddMapping = () => {
-    // 找到第一个未映射的源字段
+    // 找到第一个未映射的源字段（用复合键判断）
     const unmappedSource = allSourceFields.find(
-      (f) => !mappedSourceFieldIds.has(f.id),
+      (f) => !mappedSourceFieldKeys.has(sourceFieldKey(f.id, f.tableName)),
     );
     if (!unmappedSource) {
       message.warning('所有源字段都已映射');
@@ -100,6 +107,7 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
     const newMapping: IFieldMapping = {
       sourceFieldId: unmappedSource.id,
       sourceFieldName: unmappedSource.name,
+      sourceTableName: unmappedSource.tableName,
       targetFieldId: unmappedTarget.id,
       targetFieldName: unmappedTarget.name,
     };
@@ -114,8 +122,10 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
   };
 
   /** 修改映射的源字段 */
-  const handleSourceFieldChange = (index: number, sourceFieldId: string) => {
-    const sourceField = allSourceFields.find((f) => f.id === sourceFieldId);
+  const handleSourceFieldChange = (index: number, compositeKey: string) => {
+    const sourceField = allSourceFields.find(
+      (f) => sourceFieldKey(f.id, f.tableName) === compositeKey,
+    );
     if (!sourceField) return;
 
     const newMappings = [...mappings];
@@ -123,6 +133,7 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
       ...newMappings[index],
       sourceFieldId: sourceField.id,
       sourceFieldName: sourceField.name,
+      sourceTableName: sourceField.tableName,
     };
     onMappingsChange(newMappings);
   };
@@ -163,13 +174,13 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
         {mappings.map((mapping, index) => (
           <div key={index} className="mapping-item">
             <Select
-              value={mapping.sourceFieldId}
+              value={sourceFieldKey(mapping.sourceFieldId, mapping.sourceTableName)}
               onChange={(val) => handleSourceFieldChange(index, val)}
               className="mapping-select"
               placeholder="选择源字段"
               size="small"
               options={allSourceFields.map((f) => ({
-                value: f.id,
+                value: sourceFieldKey(f.id, f.tableName),
                 label: `${f.name}（${f.tableName}）`,
               }))}
             />
