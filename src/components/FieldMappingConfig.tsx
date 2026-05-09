@@ -50,21 +50,15 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
     return new Set(mappings.map((m) => sourceFieldKey(m.sourceFieldId, m.sourceTableName)));
   }, [mappings]);
 
-  /** 已映射的目标字段 ID 集合 */
-  const mappedTargetFieldIds = useMemo(() => {
-    return new Set(mappings.map((m) => m.targetFieldId));
-  }, [mappings]);
-
-  /** 自动匹配同名字段 */
+  /** 自动匹配同名字段（允许多个源字段映射到同一个目标字段） */
   useEffect(() => {
     if (!targetTable || sourceTables.length === 0) return;
 
     const autoMappings: IFieldMapping[] = [];
-    const usedTargetIds = new Set<string>();
 
     for (const sourceField of allSourceFields) {
       const matchTargetField = targetTable.fields.find(
-        (tf) => tf.name === sourceField.name && !usedTargetIds.has(tf.id),
+        (tf) => tf.name === sourceField.name,
       );
       if (matchTargetField) {
         autoMappings.push({
@@ -74,7 +68,6 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
           targetFieldId: matchTargetField.id,
           targetFieldName: matchTargetField.name,
         });
-        usedTargetIds.add(matchTargetField.id);
       }
     }
 
@@ -95,12 +88,10 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
       return;
     }
 
-    // 找到第一个未映射的目标字段
-    const unmappedTarget = targetTable?.fields.find(
-      (f) => !mappedTargetFieldIds.has(f.id),
-    );
-    if (!unmappedTarget) {
-      message.warning('所有目标字段都已映射');
+    // 找到第一个目标字段（允许重复映射到同一目标字段）
+    const firstTarget = targetTable?.fields[0];
+    if (!firstTarget) {
+      message.warning('目标表没有可用字段');
       return;
     }
 
@@ -108,8 +99,8 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
       sourceFieldId: unmappedSource.id,
       sourceFieldName: unmappedSource.name,
       sourceTableName: unmappedSource.tableName,
-      targetFieldId: unmappedTarget.id,
-      targetFieldName: unmappedTarget.name,
+      targetFieldId: firstTarget.id,
+      targetFieldName: firstTarget.name,
     };
 
     onMappingsChange([...mappings, newMapping]);
@@ -165,7 +156,7 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
     >
       <div className="mapping-description">
         <Text type="secondary">
-          配置源表字段与目标表字段的对应关系，系统已自动匹配同名字段
+          配置源表字段与目标表字段的对应关系，多个源字段可映射到同一目标字段
         </Text>
       </div>
 
