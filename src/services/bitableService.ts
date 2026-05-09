@@ -15,6 +15,14 @@ export function getDebugLogs(): string[] {
 }
 
 /**
+ * 让出主线程，避免浏览器判定页面无响应
+ * @param ms 等待毫秒数（默认 0，仅让出事件循环）
+ */
+export function sleep(ms: number = 0): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * 获取所有数据表列表
  */
 export async function getTableList(): Promise<ITableMeta[]> {
@@ -79,12 +87,17 @@ export async function getRecordCount(tableId: string): Promise<number> {
 /**
  * 分页获取指定表的所有记录
  * 同时检测记录的父子关系（通过关联字段实现）
+ * @param onProgress 进度回调（可选），参数为已加载记录数
  */
-export async function getRecords(tableId: string): Promise<IRecordData[]> {
+export async function getRecords(
+  tableId: string,
+  onProgress?: (loaded: number) => void,
+): Promise<IRecordData[]> {
   const table = await bitable.base.getTable(tableId);
   const records: IRecordData[] = [];
   const pageSize = 500;
   let pageToken: string | undefined = undefined;
+  let pageCount = 0;
 
   do {
     const result = await table.getRecords({ pageSize, pageToken });
@@ -96,6 +109,13 @@ export async function getRecords(tableId: string): Promise<IRecordData[]> {
       records.push(recordData);
     }
     pageToken = result.hasMore ? result.pageToken : undefined;
+    pageCount++;
+
+    // 每页加载后让出主线程，避免大数据量时 UI 冻结
+    if (pageCount % 2 === 0) {
+      onProgress?.(records.length);
+      await sleep(0);
+    }
   } while (pageToken);
 
   // 检测父子关系
@@ -110,6 +130,7 @@ export async function getRecords(tableId: string): Promise<IRecordData[]> {
     }
   }
 
+  onProgress?.(records.length);
   return records;
 }
 
@@ -124,14 +145,15 @@ async function detectParentChildRelations(
   if (records.length === 0) return null;
 
   // 第一步：通过扫描记录数据发现自关联字段
-  // IOpenLink 格式: { recordIds: string[], tableId: string, text: string, type: "text" }
   let selfLinkFieldId: string | null = null;
 
-  for (const record of records) {
+  // 只扫描前 100 条记录来发现自关联字段（不需要扫全部）
+  const scanLimit = Math.min(records.length, 100);
+  for (let i = 0; i < scanLimit; i++) {
+    const record = records[i];
     for (const [fieldId, value] of Object.entries(record.fields)) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         const v = value as any;
-        // 检查是否是 IOpenLink 格式
         if ((v.recordIds || v.record_ids) && v.tableId) {
           const ids = v.recordIds || v.record_ids || [];
           if (Array.isArray(ids) && ids.length > 0 && v.tableId === tableId) {
@@ -185,7 +207,6 @@ async function detectParentChildRelations(
 
       if (parentIds.length > 0) {
         relation.parentId = parentIds[0];
-        debugLog(`记录 ${record.recordId} -> 父记录 ${parentIds[0]}`);
         for (const pid of parentIds) {
           const parentRelation = relationMap.get(pid);
           if (parentRelation) {
@@ -201,10 +222,12 @@ async function detectParentChildRelations(
 
 /**
  * 批量创建记录到指定表（无父子关系时使用）
+ * @param onProgress 进度回调（可选），参数为已创建记录数
  */
 export async function batchCreateRecords(
   tableId: string,
   records: Record<string, unknown>[],
+  onProgress?: (created: number) => void,
 ): Promise<number> {
   if (records.length === 0) return 0;
 
@@ -219,6 +242,10 @@ export async function batchCreateRecords(
     }));
     const createdRecords = await table.addRecords(recordValues);
     createdCount += createdRecords.length;
+
+    // 每批写入后让出主线程，避免 UI 冻结
+    onProgress?.(createdCount);
+    await sleep(50);
   }
 
   return createdCount;
@@ -226,8 +253,7 @@ export async function batchCreateRecords(
 
 /**
  * 按层级顺序创建记录（支持父子记录）
- * 方式5验证有效：在 addRecord 的 fields 中直接传入 IOpenLink 对象
- * 策略：先批量添加父记录，再批量添加子记录（子记录的关联字段直接包含 IOpenLink 值）
+ * @param onProgress 进度回调（可选），参数为已创建记录数
  */
 export async function batchCreateRecordsWithHierarchy(
   tableId: string,
@@ -238,6 +264,7 @@ export async function batchCreateRecordsWithHierarchy(
     sourceParentId?: string;
     linkFieldId?: string;
   }[],
+  onProgress?: (created: number) => void,
 ): Promise<{ createdCount: number; sourceToNewIdMap: Map<string, string> }> {
   if (recordsWithMeta.length === 0) {
     return { createdCount: 0, sourceToNewIdMap: new Map() };
@@ -252,12 +279,6 @@ export async function batchCreateRecordsWithHierarchy(
   const childEntries = recordsWithMeta.filter((r) => !r.isParent && r.sourceParentId);
 
   debugLog(`[Hierarchy] 总记录: ${recordsWithMeta.length}, 父记录: ${parentEntries.length}, 子记录: ${childEntries.length}`);
-  if (parentEntries.length > 0) {
-    debugLog(`[Hierarchy] 父记录示例: ${JSON.stringify(parentEntries[0].fields).slice(0, 300)}`);
-  }
-  if (childEntries.length > 0) {
-    debugLog(`[Hierarchy] 子记录示例: ${JSON.stringify(childEntries[0].fields).slice(0, 300)}`);
-  }
 
   // ============================================
   // 第一步：创建所有父记录
@@ -270,11 +291,14 @@ export async function batchCreateRecordsWithHierarchy(
         fields: entry.fields as IRecordValue['fields'],
       }));
       const newRecordIds = await table.addRecords(recordValues);
-      debugLog(`[Hierarchy] 父记录创建成功: ${newRecordIds.length} 条, IDs: ${newRecordIds.join(',')}`);
       for (let j = 0; j < newRecordIds.length; j++) {
         sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
       }
       createdCount += newRecordIds.length;
+
+      // 每批写入后让出主线程
+      onProgress?.(createdCount);
+      await sleep(50);
     }
   }
 
@@ -290,7 +314,6 @@ export async function batchCreateRecordsWithHierarchy(
       for (const entry of batch) {
         const fields = { ...entry.fields };
 
-        // 如果有父记录且父记录已成功添加，直接在 fields 中设置 IOpenLink 关联值
         if (entry.linkFieldId && entry.sourceParentId) {
           const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
           if (newParentId) {
@@ -300,9 +323,6 @@ export async function batchCreateRecordsWithHierarchy(
               recordIds: [newParentId],
               tableId: tableId,
             };
-            debugLog(`[Hierarchy] 子记录 ${entry.sourceRecordId} -> 关联父记录 ${newParentId}`);
-          } else {
-            debugLog(`[Hierarchy] 子记录 ${entry.sourceRecordId} -> 父记录 ${entry.sourceParentId} 未找到映射，跳过关联`);
           }
         }
 
@@ -314,6 +334,10 @@ export async function batchCreateRecordsWithHierarchy(
         sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
       }
       createdCount += newRecordIds.length;
+
+      // 每批写入后让出主线程
+      onProgress?.(createdCount);
+      await sleep(50);
     }
   }
 

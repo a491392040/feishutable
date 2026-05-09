@@ -30,6 +30,7 @@ import {
   batchCreateRecords,
   getDebugLogs,
   debugLog as serviceDebugLog,
+  sleep,
 } from '@/services/bitableService';
 import TableSelector from '@/components/TableSelector';
 import FieldMappingConfig from '@/components/FieldMappingConfig';
@@ -247,28 +248,29 @@ const App: React.FC = () => {
     try {
       // 阶段1：加载目标表数据
       setProgressText('正在加载目标表数据...');
-      await timer.recordPhase('加载目标表数据', async () => {
-        // 预加载，实际数据在循环中使用
-      });
-      const targetRecords = await getRecords(config.targetTableId);
+      const targetRecords = await getRecords(
+        config.targetTableId,
+        (loaded) => setProgressText(`正在加载目标表数据... (${loaded} 条)`),
+      );
 
       // 检测源表是否有父子关系
-      // 先加载所有源表数据来检测
       let hasAnyParentChild = false;
       const allSourceRecordsMap = new Map<string, IRecordData[]>();
       for (const sourceTableId of config.sourceTableIds) {
-        const records = await getRecords(sourceTableId);
+        const tableName = tables.find((t) => t.id === sourceTableId)?.name || sourceTableId;
+        const records = await getRecords(
+          sourceTableId,
+          (loaded) => setProgressText(`正在加载源表 (${tableName})... (${loaded} 条)`),
+        );
         allSourceRecordsMap.set(sourceTableId, records);
         const parentCount = records.filter((r) => !r.parentRecordId).length;
         const childCount = records.filter((r) => !!r.parentRecordId).length;
-        serviceDebugLog(`源表 ${sourceTableId}: 总${records.length}条, 父${parentCount}条, 子${childCount}条`);
-        // 打印每条记录的完整数据
-        for (const r of records) {
-          serviceDebugLog(`记录 ${r.recordId}, parentRecordId=${r.parentRecordId || '无'}, fields=${JSON.stringify(r.fields)}`);
-        }
+        serviceDebugLog(`源表 ${tableName}: 总${records.length}条, 父${parentCount}条, 子${childCount}条`);
         if (records.some((r) => r.parentRecordId)) {
           hasAnyParentChild = true;
         }
+        // 源表间加载间隔，避免连续请求卡顿
+        await sleep(50);
       }
       serviceDebugLog(`hasAnyParentChild = ${hasAnyParentChild}`);
 
@@ -277,8 +279,6 @@ const App: React.FC = () => {
       if (hasAnyParentChild) {
         targetLinkFieldId = await ensureSelfLinkField(config.targetTableId);
         serviceDebugLog(`targetLinkFieldId = ${targetLinkFieldId}`);
-      } else {
-        serviceDebugLog(`未检测到父子关系，跳过关联字段创建`);
       }
 
       // 动态导入合并引擎
@@ -311,7 +311,6 @@ const App: React.FC = () => {
           let toSkip: IRecordData[] = [];
           await timer.recordPhase(`去重计算: ${sourceTableName}`, async () => {
             serviceDebugLog(`去重: 源表${sourceTableName} ${sourceRecords.length}条 vs 目标表+已合并 ${targetRecords.length}条`);
-            // 过滤出只属于当前源表的字段映射（避免其他源表的映射干扰去重 key）
             const currentMappings = config.fieldMappings.filter(
               (m) => m.sourceTableName === sourceTableName
             );
@@ -327,22 +326,17 @@ const App: React.FC = () => {
           if (toMerge.length === 0) continue;
 
           // 阶段4：写入记录
-          setProgressText(`正在写入记录 (${sourceTableName}, ${toMerge.length} 条)...`);
+          setProgressText(`正在写入记录 (${sourceTableName}, 0/${toMerge.length} 条)...`);
           await timer.recordPhase(`写入记录: ${sourceTableName}`, async () => {
-            // 检查是否存在父子关系需要处理
             const hasParentChild = sourceRecords.some((r) => r.parentRecordId);
             serviceDebugLog(`写入阶段: hasParentChild=${hasParentChild}, targetLinkFieldId=${targetLinkFieldId}, toMerge=${toMerge.length}, toSkip=${toSkip.length}`);
 
             if (hasParentChild && targetLinkFieldId) {
-              // 有父子关系：按层级顺序写入
-              // 1. 先确定哪些源记录被去重跳过了
               const skippedRecordIds = new Set(toSkip.map((r) => r.recordId));
-              // 2. 构建源记录 ID -> 映射后字段的查找表
               const mappedFieldsMap = new Map<string, Record<string, unknown>>();
               for (const r of sourceRecords) {
                 mappedFieldsMap.set(r.recordId, mapSingleRecord(r, config));
               }
-              // 3. 构建待写入记录的元数据（排除被去重跳过的记录）
               const recordsWithMeta = sourceRecords
                 .filter((r) => !skippedRecordIds.has(r.recordId))
                 .map((r) => ({
@@ -356,11 +350,15 @@ const App: React.FC = () => {
               const { createdCount } = await batchCreateRecordsWithHierarchy(
                 config.targetTableId,
                 recordsWithMeta,
+                (created) => setProgressText(`正在写入记录 (${sourceTableName}, ${created}/${toMerge.length} 条)...`),
               );
               result.mergedRecords += createdCount;
             } else {
-              // 无父子关系：直接批量写入
-              const createdCount = await batchCreateRecords(config.targetTableId, toMerge);
+              const createdCount = await batchCreateRecords(
+                config.targetTableId,
+                toMerge,
+                (created) => setProgressText(`正在写入记录 (${sourceTableName}, ${created}/${toMerge.length} 条)...`),
+              );
               result.mergedRecords += createdCount;
             }
           });
