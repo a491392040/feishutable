@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
-import { Card, Select, Button, Typography, Tag, Space, message } from 'antd';
-import { PlusOutlined, DeleteOutlined, SwapOutlined } from '@ant-design/icons';
+import { Card, Select, Button, Typography, Tag, Space, message, Input, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, SwapOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import type { ITableMeta, IFieldMapping } from '@/types';
 
 const { Text } = Typography;
@@ -67,6 +67,7 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
           sourceTableName: sourceField.tableName,
           targetFieldId: matchTargetField.id,
           targetFieldName: matchTargetField.name,
+          defaultValue: '',
         });
       }
     }
@@ -101,6 +102,7 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
       sourceTableName: unmappedSource.tableName,
       targetFieldId: firstTarget.id,
       targetFieldName: firstTarget.name,
+      defaultValue: '',
     };
 
     onMappingsChange([...mappings, newMapping]);
@@ -139,6 +141,16 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
       ...newMappings[index],
       targetFieldId: targetField.id,
       targetFieldName: targetField.name,
+    };
+    onMappingsChange(newMappings);
+  };
+
+  /** 修改默认值 */
+  const handleDefaultValueChange = (index: number, value: string) => {
+    const newMappings = [...mappings];
+    newMappings[index] = {
+      ...newMappings[index],
+      defaultValue: value,
     };
     onMappingsChange(newMappings);
   };
@@ -187,6 +199,18 @@ const FieldMappingConfig: React.FC<IFieldMappingConfigProps> = ({
                 label: f.name,
               })) || []}
             />
+            <Tooltip title="当源字段值为空时使用此默认值">
+              <Input
+                className="mapping-default-value"
+                placeholder="默认值"
+                size="small"
+                value={mapping.defaultValue || ''}
+                onChange={(e) => handleDefaultValueChange(index, e.target.value)}
+                suffix={
+                  <QuestionCircleOutlined style={{ color: '#bfbfbf', fontSize: 12 }} />
+                }
+              />
+            </Tooltip>
             <Button
               type="text"
               danger

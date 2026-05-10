@@ -210,6 +210,7 @@ const App: React.FC = () => {
         fieldMappings: config.fieldMappings.map((m) => ({
           sourceFieldName: m.sourceFieldName,
           targetFieldName: m.targetFieldName,
+          defaultValue: m.defaultValue,
         })),
         dedupConfig: {
           enabled: config.dedupConfig.enabled,

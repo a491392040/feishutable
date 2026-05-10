@@ -51,7 +51,15 @@ export function generateRecordKey(
 }
 
 /**
+ * 判断值是否为空（undefined、null、空字符串）
+ */
+function isEmptyValue(value: unknown): boolean {
+  return value === undefined || value === null || value === '';
+}
+
+/**
  * 按映射关系转换源记录字段为目标字段格式
+ * 支持默认值：当源字段值为空时使用映射配置中的 defaultValue
  */
 export function mapRecordFields(
   sourceRecord: IRecordData,
@@ -61,9 +69,15 @@ export function mapRecordFields(
 
   for (const mapping of config.fieldMappings) {
     const sourceValue = sourceRecord.fields[mapping.sourceFieldId];
-    if (sourceValue !== undefined && sourceValue !== null) {
+
+    if (!isEmptyValue(sourceValue)) {
+      // 源值不为空，直接使用
       mappedFields[mapping.targetFieldId] = sourceValue;
+    } else if (mapping.defaultValue !== undefined && mapping.defaultValue !== '') {
+      // 源值为空但有默认值，使用默认值
+      mappedFields[mapping.targetFieldId] = mapping.defaultValue;
     }
+    // 源值为空且无默认值，不写入该字段（保持 undefined）
   }
 
   return mappedFields;

@@ -38,6 +38,8 @@ export interface IFieldMapping {
   targetFieldId: string;
   /** 目标字段名称 */
   targetFieldName: string;
+  /** 默认值（当源字段值为空时使用） */
+  defaultValue?: string;
 }
 
 /**
@@ -127,6 +129,8 @@ export interface IDryRunData {
     sourceFieldName: string;
     /** 目标字段名 */
     targetFieldName: string;
+    /** 默认值（当源字段值为空时使用） */
+    defaultValue?: string;
   }[];
   /** 去重配置 */
   dedupConfig: {
