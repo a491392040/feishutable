@@ -420,11 +420,20 @@ const App: React.FC = () => {
   }, [getMergeConfig, tables]);
 
   /** 映射单条记录字段 */
+  /** 判断值是否为关联字段值 */
+  const isLinkFieldValue = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const v = value as any;
+    return (v.recordIds || v.record_ids) && v.tableId;
+  };
+
   const mapSingleRecord = (record: IRecordData, config: IMergeConfig): Record<string, unknown> => {
     const mapped: Record<string, unknown> = {};
     for (const mapping of config.fieldMappings) {
       const value = record.fields[mapping.sourceFieldId];
       if (value !== undefined && value !== null) {
+        // 跳过关联字段值（包含源表的 tableId，写入目标表会报 LinkFieldConvFail）
+        if (isLinkFieldValue(value)) continue;
         mapped[mapping.targetFieldId] = value;
       }
     }
