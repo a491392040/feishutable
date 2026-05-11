@@ -140,8 +140,37 @@ export function deduplicateRecords(
 }
 
 /**
+ * 从字段值中提取纯文本
+ * 支持富文本格式 [{"type":"text","text":"xxx"}] 和普通字符串
+ */
+function extractPlainText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    // 富文本格式：[{type:"text",text:"xxx"}, ...]
+    return value
+      .filter((item: any) => item && item.type === 'text' && typeof item.text === 'string')
+      .map((item: any) => item.text)
+      .join('');
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as any;
+    if (typeof obj.text === 'string') return obj.text;
+  }
+  return String(value ?? '');
+}
+
+/**
+ * 将纯文本字符串转为富文本格式
+ */
+function toRichText(text: string): unknown[] {
+  if (!text) return [];
+  return [{ type: 'text', text }];
+}
+
+/**
  * 将一条映射后的记录按拆分配置拆分为多条记录
  * 主字段值按分隔符拆分，同步拆分字段一一对应拆分
+ * 支持富文本格式字段值
  */
 export function splitRecord(
   mappedFields: Record<string, unknown>,
@@ -151,14 +180,14 @@ export function splitRecord(
     return [mappedFields];
   }
 
-  // 获取主字段的目标字段名（通过 fieldMappings 查找）
-  // mappedFields 的 key 是 targetFieldId
   const primaryValue = mappedFields[config.primaryFieldId];
   if (primaryValue === undefined || primaryValue === null || primaryValue === '') {
     return [mappedFields];
   }
 
-  const primaryParts = String(primaryValue).split(config.separator);
+  // 提取纯文本进行拆分
+  const primaryText = extractPlainText(primaryValue);
+  const primaryParts = primaryText.split(config.separator);
   if (primaryParts.length <= 1) {
     return [mappedFields];
   }
@@ -168,18 +197,27 @@ export function splitRecord(
   for (const syncFieldId of config.syncFieldIds) {
     const syncValue = mappedFields[syncFieldId];
     if (syncValue !== undefined && syncValue !== null && syncValue !== '') {
-      syncPartsMap.set(syncFieldId, String(syncValue).split(config.separator));
+      const syncText = extractPlainText(syncValue);
+      syncPartsMap.set(syncFieldId, syncText.split(config.separator));
     }
   }
 
   const result: Record<string, unknown>[] = [];
   for (let i = 0; i < primaryParts.length; i++) {
     const record = { ...mappedFields };
-    record[config.primaryFieldId] = primaryParts[i].trim();
+    // 判断原值是否为富文本格式，保持格式一致
+    const isRichText = Array.isArray(primaryValue);
+    record[config.primaryFieldId] = isRichText
+      ? toRichText(primaryParts[i].trim())
+      : primaryParts[i].trim();
 
     // 同步拆分字段
     for (const [fieldId, parts] of syncPartsMap) {
-      record[fieldId] = i < parts.length ? parts[i].trim() : '';
+      const syncValue = mappedFields[fieldId];
+      const isSyncRichText = Array.isArray(syncValue);
+      record[fieldId] = isSyncRichText
+        ? toRichText(i < parts.length ? parts[i].trim() : '')
+        : (i < parts.length ? parts[i].trim() : '');
     }
 
     result.push(record);
