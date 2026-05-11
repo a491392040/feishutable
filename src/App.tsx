@@ -362,6 +362,15 @@ const App: React.FC = () => {
               const m = config.fieldMappings.find((m) => m.sourceFieldId === sid);
               return m?.targetFieldId || sid;
             });
+            serviceDebugLog(`[拆分] enabled=${config.splitConfig.enabled}, primaryFieldId=${config.splitConfig.primaryFieldId}, separator="${config.splitConfig.separator}", primaryMapping=${primaryMapping ? primaryMapping.targetFieldId : 'null'}`);
+            if (config.splitConfig.enabled && toMerge.length > 0) {
+              const sampleRecord = toMerge[0];
+              const sampleTargetFieldId = primaryMapping?.targetFieldId;
+              serviceDebugLog(`[拆分] sampleRecord keys=${Object.keys(sampleRecord).join(',')}, sampleTargetFieldId=${sampleTargetFieldId}`);
+              if (sampleTargetFieldId) {
+                serviceDebugLog(`[拆分] sampleRecord[${sampleTargetFieldId}]=${JSON.stringify(sampleRecord[sampleTargetFieldId])}`);
+              }
+            }
 
             if (hasParentChild && targetLinkFieldId) {
               // ===== 分支A：有父子关系 =====
