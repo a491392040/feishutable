@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Card, Checkbox, Radio, Tag, Empty, Typography, Input, Button, Space } from 'antd';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Card, Checkbox, Radio, Tag, Empty, Typography, Input, Space } from 'antd';
 import { TableOutlined, UnorderedListOutlined, SearchOutlined } from '@ant-design/icons';
 import type { ITableMeta } from '@/types';
 
@@ -18,7 +18,7 @@ interface ITableSelectorProps {
   description: string;
   /** 选择变更回调 */
   onChange: (ids: string[]) => void;
-  /** 是否显示关键字搜索（仅多选模式） */
+  /** 是否显示关键字匹配模式（仅多选模式） */
   showKeywordSearch?: boolean;
 }
 
@@ -31,17 +31,33 @@ const TableSelector: React.FC<ITableSelectorProps> = ({
   onChange,
   showKeywordSearch = false,
 }) => {
+  /** 选择模式：manual=手动选择，keyword=关键字匹配 */
+  const [selectMode, setSelectMode] = useState<'manual' | 'keyword'>('manual');
+  /** 关键字输入 */
   const [keyword, setKeyword] = useState('');
 
-  /** 根据关键字过滤的表 */
-  const filteredTables = useMemo(() => {
-    if (!keyword.trim()) return tables;
-    const kw = keyword.trim().toLowerCase();
-    return tables.filter((t) => t.name.toLowerCase().includes(kw));
+  /** 根据关键字匹配的表（以关键字开头） */
+  const matchedTables = useMemo(() => {
+    if (!keyword.trim()) return [];
+    const kw = keyword.trim();
+    return tables.filter((t) => t.name.startsWith(kw));
   }, [tables, keyword]);
 
-  /** 匹配的表 ID 集合 */
-  const filteredIds = useMemo(() => new Set(filteredTables.map((t) => t.id)), [filteredTables]);
+  /** 关键字模式下，自动更新选中项 */
+  useEffect(() => {
+    if (selectMode === 'keyword' && mode === 'multiple') {
+      onChange(matchedTables.map((t) => t.id));
+    }
+  }, [selectMode, keyword, matchedTables, mode, onChange]);
+
+  /** 切换模式时清空选择 */
+  const handleModeChange = (newMode: 'manual' | 'keyword') => {
+    setSelectMode(newMode);
+    setKeyword('');
+    if (newMode === 'manual') {
+      onChange([]);
+    }
+  };
 
   /** 多选变更 */
   const handleCheckboxChange = (checkedValues: string[]) => {
@@ -51,25 +67,6 @@ const TableSelector: React.FC<ITableSelectorProps> = ({
   /** 单选变更 */
   const handleRadioChange = (e: any) => {
     onChange([e.target.value]);
-  };
-
-  /** 全选匹配项 */
-  const handleSelectAllMatched = () => {
-    const matchedIds = filteredTables.map((t) => t.id);
-    // 合并：保留已选中的 + 新匹配的
-    const merged = Array.from(new Set([...selectedIds, ...matchedIds]));
-    onChange(merged);
-  };
-
-  /** 清除匹配项 */
-  const handleClearMatched = () => {
-    const remaining = selectedIds.filter((id) => !filteredIds.has(id));
-    onChange(remaining);
-  };
-
-  /** 清空所有选择 */
-  const handleClearAll = () => {
-    onChange([]);
   };
 
   if (tables.length === 0) {
@@ -94,56 +91,86 @@ const TableSelector: React.FC<ITableSelectorProps> = ({
         <Text type="secondary">{description}</Text>
       </div>
 
-      {/* 关键字搜索区域 */}
+      {/* 模式切换（仅多选模式显示） */}
       {showKeywordSearch && mode === 'multiple' && (
         <div style={{ marginBottom: 12 }}>
-          <Space.Compact style={{ width: '100%' }}>
-            <Input
-              placeholder="输入关键字匹配表名（如：销售、Q1）"
-              prefix={<SearchOutlined />}
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              allowClear
-            />
-            <Button
-              type="primary"
-              onClick={handleSelectAllMatched}
-              disabled={filteredTables.length === 0}
-            >
-              全选匹配 ({filteredTables.length})
-            </Button>
-            <Button
-              onClick={handleClearMatched}
-              disabled={filteredTables.length === 0 || selectedIds.length === 0}
-            >
-              移除匹配
-            </Button>
-            <Button
-              onClick={handleClearAll}
-              disabled={selectedIds.length === 0}
-            >
-              清空
-            </Button>
-          </Space.Compact>
-          {keyword.trim() && (
-            <Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
-              匹配到 {filteredTables.length} / {tables.length} 个数据表
-              {filteredTables.length > 0 && (
-                <span>：{filteredTables.map((t) => t.name).join('、')}</span>
-              )}
-            </Text>
-          )}
+          <Radio.Group
+            value={selectMode}
+            onChange={(e) => handleModeChange(e.target.value)}
+            optionType="button"
+            buttonStyle="solid"
+            size="small"
+          >
+            <Radio.Button value="manual">手动选择</Radio.Button>
+            <Radio.Button value="keyword">关键字匹配</Radio.Button>
+          </Radio.Group>
         </div>
       )}
 
-      {/* 显示的表列表：有搜索关键字时只显示匹配的，否则显示全部 */}
-      {mode === 'multiple' ? (
+      {/* 关键字匹配模式 */}
+      {showKeywordSearch && mode === 'multiple' && selectMode === 'keyword' && (
+        <div style={{ marginBottom: 12 }}>
+          <Input
+            placeholder="输入关键字，自动选择所有以该关键字开头的表"
+            prefix={<SearchOutlined />}
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            allowClear
+            size="large"
+          />
+          {keyword.trim() && (
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                匹配到 {matchedTables.length} / {tables.length} 个数据表
+                {matchedTables.length > 0 && (
+                  <span>：{matchedTables.map((t) => t.name).join('、')}</span>
+                )}
+              </Text>
+            </div>
+          )}
+          {/* 显示匹配的表（只读列表，不可勾选） */}
+          <div style={{ marginTop: 12 }}>
+            {matchedTables.length > 0 ? (
+              matchedTables.map((table) => (
+                <Card
+                  key={table.id}
+                  className="table-card table-card-selected"
+                  size="small"
+                  style={{ marginBottom: 8 }}
+                >
+                  <div className="table-card-content">
+                    <div className="table-card-name">
+                      <TableOutlined />
+                      <span>{table.name}</span>
+                    </div>
+                    <div className="table-card-meta">
+                      <Tag color="blue" icon={<UnorderedListOutlined />}>
+                        {table.fields.length} 个字段
+                      </Tag>
+                      <Tag color="green">
+                        {table.recordCount ?? 0} 条记录
+                      </Tag>
+                    </div>
+                  </div>
+                </Card>
+              ))
+            ) : keyword.trim() ? (
+              <Text type="secondary">没有匹配的数据表</Text>
+            ) : (
+              <Text type="secondary">请输入关键字开始匹配</Text>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 手动选择模式 */}
+      {mode === 'multiple' && (selectMode === 'manual' || !showKeywordSearch) && (
         <Checkbox.Group
           value={selectedIds}
           onChange={handleCheckboxChange}
           className="table-checkbox-group"
         >
-          {(keyword.trim() ? filteredTables : tables).map((table) => (
+          {tables.map((table) => (
             <Card
               key={table.id}
               className={`table-card ${selectedIds.includes(table.id) ? 'table-card-selected' : ''}`}
@@ -168,7 +195,10 @@ const TableSelector: React.FC<ITableSelectorProps> = ({
             </Card>
           ))}
         </Checkbox.Group>
-      ) : (
+      )}
+
+      {/* 单选模式 */}
+      {mode === 'single' && (
         <Radio.Group
           value={selectedIds[0] || ''}
           onChange={handleRadioChange}
@@ -199,29 +229,6 @@ const TableSelector: React.FC<ITableSelectorProps> = ({
             </Card>
           ))}
         </Radio.Group>
-      )}
-
-      {/* 有搜索关键字时，底部显示未匹配但已选中的表 */}
-      {keyword.trim() && mode === 'multiple' && selectedIds.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          {selectedIds
-            .filter((id) => !filteredIds.has(id))
-            .map((id) => {
-              const table = tables.find((t) => t.id === id);
-              if (!table) return null;
-              return (
-                <Tag
-                  key={id}
-                  closable
-                  onClose={() => onChange(selectedIds.filter((sid) => sid !== id))}
-                  color="orange"
-                  style={{ marginBottom: 4 }}
-                >
-                  {table.name}（未匹配）
-                </Tag>
-              );
-            })}
-        </div>
       )}
     </div>
   );
