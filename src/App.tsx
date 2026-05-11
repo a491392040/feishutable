@@ -33,6 +33,7 @@ import {
   debugLog as serviceDebugLog,
   sleep,
 } from '@/services/bitableService';
+import { splitRecord } from '@/utils/mergeEngine';
 import TableSelector from '@/components/TableSelector';
 import FieldMappingConfig from '@/components/FieldMappingConfig';
 import DedupConfig from '@/components/DedupConfig';
@@ -352,13 +353,24 @@ const App: React.FC = () => {
             const hasParentChild = sourceRecords.some((r) => r.parentRecordId);
             serviceDebugLog(`写入阶段: hasParentChild=${hasParentChild}, targetLinkFieldId=${targetLinkFieldId}, toMerge=${toMerge.length}, toSkip=${toSkip.length}`);
 
+            // ===== 拆分处理（写入前统一执行） =====
+            // 将源字段 ID 转换为目标字段 ID
+            const primaryMapping = config.fieldMappings.find(
+              (m) => m.sourceFieldId === config.splitConfig.primaryFieldId,
+            );
+            const syncTargetIds = config.splitConfig.syncFieldIds.map((sid) => {
+              const m = config.fieldMappings.find((m) => m.sourceFieldId === sid);
+              return m?.targetFieldId || sid;
+            });
+
             if (hasParentChild && targetLinkFieldId) {
+              // ===== 分支A：有父子关系 =====
               const skippedRecordIds = new Set(toSkip.map((r) => r.recordId));
               const mappedFieldsMap = new Map<string, Record<string, unknown>>();
               for (const r of sourceRecords) {
                 mappedFieldsMap.set(r.recordId, mapSingleRecord(r, config));
               }
-              const recordsWithMeta = sourceRecords
+              let recordsWithMeta = sourceRecords
                 .filter((r) => !skippedRecordIds.has(r.recordId))
                 .map((r) => ({
                   fields: mappedFieldsMap.get(r.recordId)!,
@@ -368,17 +380,55 @@ const App: React.FC = () => {
                   linkFieldId: targetLinkFieldId,
                 }));
 
+              // 拆分
+              if (config.splitConfig.enabled && primaryMapping) {
+                const splitConfigWithTargetIds: ISplitConfig = {
+                  ...config.splitConfig,
+                  primaryFieldId: primaryMapping.targetFieldId,
+                  syncFieldIds: syncTargetIds,
+                };
+                const splitRecords: typeof recordsWithMeta = [];
+                for (const item of recordsWithMeta) {
+                  const parts = splitRecord(item.fields, splitConfigWithTargetIds);
+                  serviceDebugLog(`[拆分-A] sourceRecordId=${item.sourceRecordId}, isParent=${item.isParent}, 拆分为 ${parts.length} 条`);
+                  for (const part of parts) {
+                    splitRecords.push({ ...item, fields: part });
+                  }
+                }
+                serviceDebugLog(`[拆分-A] 分支A: 拆分前 ${recordsWithMeta.length} 条 → 拆分后 ${splitRecords.length} 条`);
+                recordsWithMeta = splitRecords;
+              }
+
               const { createdCount } = await batchCreateRecordsWithHierarchy(
                 config.targetTableId,
                 recordsWithMeta,
-                (created) => setProgressText(`正在写入记录 (${sourceTableName}, ${created}/${toMerge.length} 条)...`),
+                (created) => setProgressText(`正在写入记录 (${sourceTableName}, ${created}/${recordsWithMeta.length} 条)...`),
               );
               result.mergedRecords += createdCount;
             } else {
+              // ===== 分支B：无父子关系 =====
+              let finalToMerge = toMerge;
+
+              // 拆分
+              if (config.splitConfig.enabled && primaryMapping) {
+                const splitConfigWithTargetIds: ISplitConfig = {
+                  ...config.splitConfig,
+                  primaryFieldId: primaryMapping.targetFieldId,
+                  syncFieldIds: syncTargetIds,
+                };
+                const splitRecords: Record<string, unknown>[] = [];
+                for (const record of finalToMerge) {
+                  const parts = splitRecord(record, splitConfigWithTargetIds);
+                  splitRecords.push(...parts);
+                }
+                serviceDebugLog(`[拆分-B] 分支B: 拆分前 ${finalToMerge.length} 条 → 拆分后 ${splitRecords.length} 条`);
+                finalToMerge = splitRecords;
+              }
+
               const createdCount = await batchCreateRecords(
                 config.targetTableId,
-                toMerge,
-                (created) => setProgressText(`正在写入记录 (${sourceTableName}, ${created}/${toMerge.length} 条)...`),
+                finalToMerge,
+                (created) => setProgressText(`正在写入记录 (${sourceTableName}, ${created}/${finalToMerge.length} 条)...`),
               );
               result.mergedRecords += createdCount;
             }

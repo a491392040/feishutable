@@ -203,35 +203,7 @@ export function mergeData(
   const { toMerge, toSkip } = deduplicateRecords(sourceRecords, targetRecords, config);
 
   // 将待合并的源记录转换为目标字段格式
-  let mappedRecords = toMerge.map((record) => mapRecordFields(record, config));
-
-  // 如果启用了拆分，对每条记录进行拆分
-  if (config.splitConfig.enabled) {
-    // 将源字段 ID 转换为目标字段 ID
-    const primaryMapping = config.fieldMappings.find(
-      (m) => m.sourceFieldId === config.splitConfig.primaryFieldId,
-    );
-    const syncTargetIds = config.splitConfig.syncFieldIds.map((sid) => {
-      const m = config.fieldMappings.find((m) => m.sourceFieldId === sid);
-      return m?.targetFieldId || sid;
-    });
-
-    if (primaryMapping) {
-      const splitConfigWithTargetIds: ISplitConfig = {
-        ...config.splitConfig,
-        primaryFieldId: primaryMapping.targetFieldId,
-        syncFieldIds: syncTargetIds,
-      };
-
-      const splitRecords: Record<string, unknown>[] = [];
-      for (const record of mappedRecords) {
-        const parts = splitRecord(record, splitConfigWithTargetIds);
-        splitRecords.push(...parts);
-      }
-      debugLog(`[拆分] 拆分前 ${mappedRecords.length} 条 → 拆分后 ${splitRecords.length} 条`);
-      mappedRecords = splitRecords;
-    }
-  }
+  const mappedRecords = toMerge.map((record) => mapRecordFields(record, config));
 
   return { toMerge: mappedRecords, toSkip };
 }
