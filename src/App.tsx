@@ -13,6 +13,7 @@ import type {
   ITableMeta,
   IFieldMapping,
   IDedupConfig,
+  ISplitConfig,
   IMergeConfig,
   IMergeResult,
   IMergeTimings,
@@ -34,10 +35,11 @@ import {
 } from '@/services/bitableService';
 import TableSelector from '@/components/TableSelector';
 import FieldMappingConfig from '@/components/FieldMappingConfig';
+import DedupConfig from '@/components/DedupConfig';
+import SplitFieldConfig from '@/components/SplitFieldConfig';
+import MergePreview from '@/components/MergePreview';
 
 const { Text } = Typography;
-import DedupConfig from '@/components/DedupConfig';
-import MergePreview from '@/components/MergePreview';
 
 /** 版本号 - 每次修复后递增 */
 const APP_VERSION = 'v1.3.4';
@@ -46,6 +48,15 @@ const defaultDedupConfig: IDedupConfig = {
   mode: 'all_fields',
   dedupFields: [],
   strategy: 'skip',
+};
+
+const defaultSplitConfig: ISplitConfig = {
+  enabled: false,
+  primaryFieldId: '',
+  primaryFieldName: '',
+  syncFieldIds: [],
+  syncFieldNames: [],
+  separator: '',
 };
 
 /**
@@ -104,6 +115,8 @@ const App: React.FC = () => {
   const [fieldMappings, setFieldMappings] = useState<IFieldMapping[]>([]);
   /** 去重配置 */
   const [dedupConfig, setDedupConfig] = useState<IDedupConfig>(defaultDedupConfig);
+  /** 字段拆分配置 */
+  const [splitConfig, setSplitConfig] = useState<ISplitConfig>(defaultSplitConfig);
   /** 仅生成参数（不执行写入） */
   const [dryRun, setDryRun] = useState(false);
   /** PersonalBaseToken（dryRun 模式使用） */
@@ -153,9 +166,10 @@ const App: React.FC = () => {
       targetTableId,
       fieldMappings,
       dedupConfig,
+      splitConfig,
       dryRun,
     };
-  }, [sourceTableIds, targetTableId, fieldMappings, dedupConfig, dryRun]);
+  }, [sourceTableIds, targetTableId, fieldMappings, dedupConfig, splitConfig, dryRun]);
 
   /** 执行合并操作（含耗时统计和父记录支持） */
   const handleExecuteMerge = useCallback(async () => {
@@ -216,6 +230,12 @@ const App: React.FC = () => {
           enabled: config.dedupConfig.enabled,
           dedupFieldNames,
           strategy: config.dedupConfig.strategy,
+        },
+        splitConfig: {
+          enabled: config.splitConfig.enabled,
+          primaryFieldName: config.splitConfig.primaryFieldName,
+          syncFieldNames: config.splitConfig.syncFieldNames,
+          separator: config.splitConfig.separator,
         },
       };
 
@@ -489,6 +509,7 @@ const App: React.FC = () => {
     setTargetTableId('');
     setFieldMappings([]);
     setDedupConfig(defaultDedupConfig);
+    setSplitConfig(defaultSplitConfig);
     setDryRun(false);
     setPersonalBaseTokenValue('');
     setMergeResult(null);
@@ -559,6 +580,13 @@ const App: React.FC = () => {
               config={dedupConfig}
               targetTable={tables.find((t) => t.id === targetTableId) || null}
               onChange={setDedupConfig}
+            />
+            <SplitFieldConfig
+              fields={tables
+                .filter((t) => sourceTableIds.includes(t.id))
+                .flatMap((t) => t.fields)}
+              config={splitConfig}
+              onConfigChange={setSplitConfig}
             />
             <Card size="small" style={{ marginTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

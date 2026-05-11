@@ -57,6 +57,25 @@ export interface IDedupConfig {
 }
 
 /**
+ * 字段拆分配置
+ * 合并时根据分隔符将一条记录拆分为多条记录
+ */
+export interface ISplitConfig {
+  /** 是否启用拆分 */
+  enabled: boolean;
+  /** 主字段 ID（值按分隔符拆分，决定拆分成几条） */
+  primaryFieldId: string;
+  /** 主字段名称 */
+  primaryFieldName: string;
+  /** 同步拆分字段 ID 列表（与主字段一一对应拆分） */
+  syncFieldIds: string[];
+  /** 同步拆分字段名称列表 */
+  syncFieldNames: string[];
+  /** 分隔符 */
+  separator: string;
+}
+
+/**
  * 合并配置
  */
 export interface IMergeConfig {
@@ -68,6 +87,8 @@ export interface IMergeConfig {
   fieldMappings: IFieldMapping[];
   /** 去重配置 */
   dedupConfig: IDedupConfig;
+  /** 字段拆分配置 */
+  splitConfig: ISplitConfig;
   /** 是否仅生成参数（不执行写入） */
   dryRun?: boolean;
 }
@@ -140,6 +161,17 @@ export interface IDryRunData {
     dedupFieldNames: string[];
     /** 去重策略：skip=跳过重复, overwrite=覆盖 */
     strategy: 'skip' | 'overwrite';
+  };
+  /** 字段拆分配置 */
+  splitConfig: {
+    /** 是否启用 */
+    enabled: boolean;
+    /** 主字段名（值按分隔符拆分） */
+    primaryFieldName: string;
+    /** 同步拆分字段名列表 */
+    syncFieldNames: string[];
+    /** 分隔符 */
+    separator: string;
   };
 }
 

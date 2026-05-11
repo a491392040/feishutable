@@ -2,6 +2,7 @@ import type {
   IRecordData,
   IFieldMapping,
   IDedupConfig,
+  ISplitConfig,
   IMergeConfig,
   IPreviewRecord,
 } from '@/types';
@@ -139,6 +140,55 @@ export function deduplicateRecords(
 }
 
 /**
+ * 将一条映射后的记录按拆分配置拆分为多条记录
+ * 主字段值按分隔符拆分，同步拆分字段一一对应拆分
+ */
+export function splitRecord(
+  mappedFields: Record<string, unknown>,
+  config: ISplitConfig,
+): Record<string, unknown>[] {
+  if (!config.enabled || !config.separator) {
+    return [mappedFields];
+  }
+
+  // 获取主字段的目标字段名（通过 fieldMappings 查找）
+  // mappedFields 的 key 是 targetFieldId
+  const primaryValue = mappedFields[config.primaryFieldId];
+  if (primaryValue === undefined || primaryValue === null || primaryValue === '') {
+    return [mappedFields];
+  }
+
+  const primaryParts = String(primaryValue).split(config.separator);
+  if (primaryParts.length <= 1) {
+    return [mappedFields];
+  }
+
+  // 拆分同步字段
+  const syncPartsMap = new Map<string, string[]>();
+  for (const syncFieldId of config.syncFieldIds) {
+    const syncValue = mappedFields[syncFieldId];
+    if (syncValue !== undefined && syncValue !== null && syncValue !== '') {
+      syncPartsMap.set(syncFieldId, String(syncValue).split(config.separator));
+    }
+  }
+
+  const result: Record<string, unknown>[] = [];
+  for (let i = 0; i < primaryParts.length; i++) {
+    const record = { ...mappedFields };
+    record[config.primaryFieldId] = primaryParts[i].trim();
+
+    // 同步拆分字段
+    for (const [fieldId, parts] of syncPartsMap) {
+      record[fieldId] = i < parts.length ? parts[i].trim() : '';
+    }
+
+    result.push(record);
+  }
+
+  return result;
+}
+
+/**
  * 合并数据
  * @param sourceRecords 源表记录
  * @param targetRecords 目标表记录
@@ -153,7 +203,35 @@ export function mergeData(
   const { toMerge, toSkip } = deduplicateRecords(sourceRecords, targetRecords, config);
 
   // 将待合并的源记录转换为目标字段格式
-  const mappedRecords = toMerge.map((record) => mapRecordFields(record, config));
+  let mappedRecords = toMerge.map((record) => mapRecordFields(record, config));
+
+  // 如果启用了拆分，对每条记录进行拆分
+  if (config.splitConfig.enabled) {
+    // 将源字段 ID 转换为目标字段 ID
+    const primaryMapping = config.fieldMappings.find(
+      (m) => m.sourceFieldId === config.splitConfig.primaryFieldId,
+    );
+    const syncTargetIds = config.splitConfig.syncFieldIds.map((sid) => {
+      const m = config.fieldMappings.find((m) => m.sourceFieldId === sid);
+      return m?.targetFieldId || sid;
+    });
+
+    if (primaryMapping) {
+      const splitConfigWithTargetIds: ISplitConfig = {
+        ...config.splitConfig,
+        primaryFieldId: primaryMapping.targetFieldId,
+        syncFieldIds: syncTargetIds,
+      };
+
+      const splitRecords: Record<string, unknown>[] = [];
+      for (const record of mappedRecords) {
+        const parts = splitRecord(record, splitConfigWithTargetIds);
+        splitRecords.push(...parts);
+      }
+      debugLog(`[拆分] 拆分前 ${mappedRecords.length} 条 → 拆分后 ${splitRecords.length} 条`);
+      mappedRecords = splitRecords;
+    }
+  }
 
   return { toMerge: mappedRecords, toSkip };
 }
