@@ -25,6 +25,7 @@ import {
   getRecordCount,
   getRecords,
   getTableName,
+  getTableFields,
   detectSelfLinkFieldId,
   ensureSelfLinkField,
   batchCreateRecordsWithHierarchy,
@@ -33,6 +34,7 @@ import {
   getDebugLogs,
   debugLog as serviceDebugLog,
   sleep,
+  filterUnsupportedFields,
 } from '@/services/bitableService';
 import { splitRecord } from '@/utils/mergeEngine';
 import TableSelector from '@/components/TableSelector';
@@ -420,6 +422,13 @@ const App: React.FC = () => {
                 recordsWithMeta = splitRecords;
               }
 
+              // 过滤掉只读字段
+              const targetFieldMetas = await getTableFields(config.targetTableId);
+              recordsWithMeta = recordsWithMeta.map((item) => ({
+                ...item,
+                fields: filterUnsupportedFields(item.fields, targetFieldMetas),
+              }));
+
               const { createdCount } = await batchCreateRecordsWithHierarchy(
                 config.targetTableId,
                 recordsWithMeta,
@@ -445,6 +454,10 @@ const App: React.FC = () => {
                 serviceDebugLog(`[拆分-B] 分支B: 拆分前 ${finalToMerge.length} 条 → 拆分后 ${splitRecords.length} 条`);
                 finalToMerge = splitRecords;
               }
+
+              // 过滤掉只读字段
+              const targetFieldMetas = await getTableFields(config.targetTableId);
+              finalToMerge = finalToMerge.map((fields) => filterUnsupportedFields(fields, targetFieldMetas));
 
               const createdCount = await batchCreateRecords(
                 config.targetTableId,

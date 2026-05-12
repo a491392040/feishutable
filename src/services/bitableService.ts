@@ -15,6 +15,72 @@ export function getDebugLogs(): string[] {
 }
 
 /**
+ * 不支持写入的字段类型
+ * 参考：https://bytedance.larkoffice.com/docx/HraldP7zUoXTGExK8uqc6lV0nNg
+ * 
+ * 字段类型对照：
+ * 0: 文本
+ * 1: 数字
+ * 2: 单选
+ * 3: 多选
+ * 4: 日期
+ * 5: 复选框
+ * 6: 用户
+ * 7: 电话号码
+ * 8: 网址
+ * 9: 附件
+ * 10: 关联
+ * 11: 公式（只读）
+ * 12: 查找引用（只读）
+ * 13: 创建时间（只读）
+ * 14: 修改时间（只读）
+ * 15: 创建人（只读）
+ * 16: 修改人（只读）
+ * 17: 自动编号（只读）
+ * 18: 自关联
+ * 19: 条码
+ * 20: 地理位置
+ * 21: 进度条
+ * 22: 评分
+ * 23: 货币
+ * 24: 邮箱
+ * 1001: 位置
+ * 1002: 群组
+ * 1003: 条码进度
+ */
+const UNSUPPORTED_WRITE_FIELD_TYPES = new Set([
+  11, // 公式（只读）
+  12, // 查找引用（只读）
+  13, // 创建时间（只读）
+  14, // 修改时间（只读）
+  15, // 创建人（只读）
+  16, // 修改人（只读）
+  17, // 自动编号（只读）
+]);
+
+/**
+ * 过滤掉不支持写入的字段
+ * @param fields 原始字段数据
+ * @param fieldMetas 字段元数据列表
+ * @returns 过滤后的字段数据
+ */
+export function filterUnsupportedFields(
+  fields: Record<string, unknown>,
+  fieldMetas: IFieldMeta[],
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const [fieldId, value] of Object.entries(fields)) {
+    const fieldMeta = fieldMetas.find((f) => f.id === fieldId);
+    if (fieldMeta && UNSUPPORTED_WRITE_FIELD_TYPES.has(fieldMeta.type)) {
+      debugLog(`[过滤] 跳过只读字段 "${fieldMeta.name}" (type=${fieldMeta.type})`);
+      continue;
+    }
+    filtered[fieldId] = value;
+  }
+  return filtered;
+}
+
+/**
  * 让出主线程，避免浏览器判定页面无响应
  * @param ms 等待毫秒数（默认 0，仅让出事件循环）
  */
