@@ -15,6 +15,40 @@ export function getDebugLogs(): string[] {
 }
 
 /**
+ * 不支持写入的字段类型（基于 @lark-base-open/js-sdk FieldType 枚举）
+ */
+const UNSUPPORTED_WRITE_FIELD_TYPES = new Set([
+  0,    // NotSupport
+  19,   // Lookup（查找引用，只读）
+  20,   // Formula（公式，只读）
+  403,  // Denied
+  1001, // CreatedTime（创建时间，只读）
+  1002, // ModifiedTime（修改时间，只读）
+  1003, // CreatedUser（创建人，只读）
+  1004, // ModifiedUser（修改人，只读）
+  1005, // AutoNumber（自动编号，只读）
+]);
+
+/**
+ * 过滤掉不支持写入的字段
+ */
+export function filterUnsupportedFields(
+  fields: Record<string, unknown>,
+  fieldMetas: IFieldMeta[],
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const [fieldId, value] of Object.entries(fields)) {
+    const fieldMeta = fieldMetas.find((f) => f.id === fieldId);
+    if (fieldMeta && UNSUPPORTED_WRITE_FIELD_TYPES.has(fieldMeta.type)) {
+      debugLog(`[过滤] 跳过只读字段 "${fieldMeta.name}" (type=${fieldMeta.type})`);
+      continue;
+    }
+    filtered[fieldId] = value;
+  }
+  return filtered;
+}
+
+/**
  * 让出主线程，避免浏览器判定页面无响应
  * @param ms 等待毫秒数（默认 0，仅让出事件循环）
  */
@@ -255,146 +289,19 @@ export async function batchCreateRecords(
   const batchSize = 500;
   let createdCount = 0;
 
-  // 已知不支持写入的字段 ID 集合（跨批次累积）
-  const unsupportedFieldIds = new Set<string>();
-
   for (let i = 0; i < records.length; i += batchSize) {
-    let batch = records.slice(i, i + batchSize);
-
-    // 过滤掉已知不支持的字段
-    if (unsupportedFieldIds.size > 0) {
-      batch = batch.map((record) => {
-        const filtered: Record<string, unknown> = {};
-        for (const [fieldId, value] of Object.entries(record)) {
-          if (!unsupportedFieldIds.has(fieldId)) {
-            filtered[fieldId] = value;
-          }
-        }
-        return filtered;
-      });
-    }
-
+    const batch = records.slice(i, i + batchSize);
     const recordValues: IRecordValue[] = batch.map((record) => ({
       fields: record as IRecordValue['fields'],
     }));
+    const createdRecords = await table.addRecords(recordValues);
+    createdCount += createdRecords.length;
 
-    try {
-      const createdRecords = await table.addRecords(recordValues);
-      createdCount += createdRecords.length;
-    } catch (err: any) {
-      const errMsg = err?.message || String(err);
-      if (errMsg.includes('not support')) {
-        // 尝试逐字段排除法：用第一条记录试探哪个字段不支持
-        if (batch.length > 0) {
-          const sampleRecord = batch[0];
-          const fieldIds = Object.keys(sampleRecord);
-          debugLog(`[写入] 检测到不支持的字段，开始逐字段排除 (${fieldIds.length} 个字段)`);
-
-          // 二分排除法
-          await excludeUnsupportedFields(
-            table, sampleRecord, fieldIds, unsupportedFieldIds,
-          );
-          debugLog(`[写入] 已识别不支持的字段: ${Array.from(unsupportedFieldIds).join(', ')}`);
-
-          // 重新过滤并写入
-          const filteredBatch = batch.map((record) => {
-            const filtered: Record<string, unknown> = {};
-            for (const [fieldId, value] of Object.entries(record)) {
-              if (!unsupportedFieldIds.has(fieldId)) {
-                filtered[fieldId] = value;
-              }
-            }
-            return filtered;
-          });
-          const filteredRecordValues: IRecordValue[] = filteredBatch.map((record) => ({
-            fields: record as IRecordValue['fields'],
-          }));
-          const createdRecords = await table.addRecords(filteredRecordValues);
-          createdCount += createdRecords.length;
-        }
-      } else {
-        throw err;
-      }
-    }
-
-    // 每批写入后让出主线程，避免 UI 冻结
     onProgress?.(createdCount);
     await sleep(50);
   }
 
   return createdCount;
-}
-
-/**
- * 二分排除法：找出不支持写入的字段
- * 用一条记录试探写入，逐步排除字段直到成功
- */
-async function excludeUnsupportedFields(
-  table: any,
-  sampleRecord: Record<string, unknown>,
-  fieldIds: string[],
-  unsupportedFieldIds: Set<string>,
-): Promise<void> {
-  // 先检查是否还有未排除的字段
-  const remainingFieldIds = fieldIds.filter((id) => !unsupportedFieldIds.has(id));
-  if (remainingFieldIds.length === 0) return;
-
-  // 尝试用所有剩余字段写入
-  const testFields: Record<string, unknown> = {};
-  for (const fieldId of remainingFieldIds) {
-    testFields[fieldId] = sampleRecord[fieldId];
-  }
-
-  try {
-    await table.addRecords([{ fields: testFields as any }]);
-    // 成功，说明所有剩余字段都支持
-  } catch (err: any) {
-    const errMsg = err?.message || String(err);
-    if (!errMsg.includes('not support')) throw err;
-
-    // 二分排除
-    if (remainingFieldIds.length === 1) {
-      // 只剩一个字段，就是它不支持
-      unsupportedFieldIds.add(remainingFieldIds[0]);
-      debugLog(`[写入] 不支持的字段: ${remainingFieldIds[0]}`);
-      return;
-    }
-
-    // 分成两半，递归检查
-    const mid = Math.ceil(remainingFieldIds.length / 2);
-    const firstHalf = remainingFieldIds.slice(0, mid);
-    const secondHalf = remainingFieldIds.slice(mid);
-
-    // 检查前半部分
-    const firstFields: Record<string, unknown> = {};
-    for (const fieldId of firstHalf) {
-      if (!unsupportedFieldIds.has(fieldId)) {
-        firstFields[fieldId] = sampleRecord[fieldId];
-      }
-    }
-    try {
-      await table.addRecords([{ fields: firstFields as any }]);
-    } catch (e: any) {
-      if ((e?.message || String(e)).includes('not support')) {
-        await excludeUnsupportedFields(table, sampleRecord, firstHalf, unsupportedFieldIds);
-      }
-    }
-
-    // 检查后半部分
-    const secondFields: Record<string, unknown> = {};
-    for (const fieldId of secondHalf) {
-      if (!unsupportedFieldIds.has(fieldId)) {
-        secondFields[fieldId] = sampleRecord[fieldId];
-      }
-    }
-    try {
-      await table.addRecords([{ fields: secondFields as any }]);
-    } catch (e: any) {
-      if ((e?.message || String(e)).includes('not support')) {
-        await excludeUnsupportedFields(table, sampleRecord, secondHalf, unsupportedFieldIds);
-      }
-    }
-  }
 }
 
 /**
