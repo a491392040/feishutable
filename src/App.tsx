@@ -350,8 +350,11 @@ const App: React.FC = () => {
 
           // 覆盖模式：先删除目标表中的重复记录
           if (toDeleteIds.length > 0) {
-            serviceDebugLog(`[覆盖] 删除目标表 ${toDeleteIds.length} 条重复记录`);
+            serviceDebugLog(`[覆盖] 删除目标表 ${toDeleteIds.length} 条重复记录, IDs: ${toDeleteIds.slice(0, 5).join(', ')}${toDeleteIds.length > 5 ? '...' : ''}`);
             await batchDeleteRecords(config.targetTableId, toDeleteIds);
+            serviceDebugLog(`[覆盖] 删除完成`);
+          } else if (config.dedupConfig.strategy === 'overwrite') {
+            serviceDebugLog(`[覆盖] 无需删除的记录 (toDeleteIds 为空)`);
           }
 
           if (toMerge.length === 0) continue;

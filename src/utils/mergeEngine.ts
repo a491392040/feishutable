@@ -48,7 +48,9 @@ export function generateRecordKey(
       keyObj[mapping.targetFieldId] = value !== undefined ? value : null;
     }
   }
-  return JSON.stringify(keyObj);
+  const key = JSON.stringify(keyObj);
+  debugLog(`[generateRecordKey] isSource=${isSourceRecord}, dedupFields=${config.dedupFields.join(',')}, key=${key.slice(0, 100)}`);
+  return key;
 }
 
 /**
@@ -105,7 +107,13 @@ export function deduplicateRecords(
     const key = generateRecordKey(record, config.dedupConfig, config.fieldMappings, false);
     existingKeyToId.set(key, record.recordId);
   }
-  debugLog(`[去重] 目标+已合并记录数: ${existingRecords.length}, 去重模式: ${config.dedupConfig.mode}`);
+  debugLog(`[去重] 目标+已合并记录数: ${existingRecords.length}, 去重模式: ${config.dedupConfig.mode}, 策略: ${config.dedupConfig.strategy}`);
+  debugLog(`[去重] 去重字段: ${config.dedupConfig.dedupFields.join(', ')}`);
+  debugLog(`[去重] existingKeyToId 大小: ${existingKeyToId.size}`);
+  if (existingKeyToId.size > 0) {
+    const sampleKeys = Array.from(existingKeyToId.entries()).slice(0, 3);
+    debugLog(`[去重] 目标表 key 样例: ${sampleKeys.map(([k, id]) => `${k.slice(0, 50)}->${id}`).join(' | ')}`);
+  }
 
   // 同时构建源记录自身的键集合（用于源表内去重）
   const sourceKeys = new Set<string>();
