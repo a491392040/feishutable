@@ -455,20 +455,14 @@ const App: React.FC = () => {
             }
           });
 
-          // 将新写入的记录加入目标记录（用于后续源表去重）
-          // 补全所有映射字段（缺失的填 null），确保去重 key 一致
-          for (const fields of toMerge) {
-            const completeFields: Record<string, unknown> = {};
-            for (const mapping of config.fieldMappings) {
-              completeFields[mapping.targetFieldId] = fields[mapping.targetFieldId] !== undefined
-                ? fields[mapping.targetFieldId]
-                : null;
-            }
-            targetRecords.push({
-              recordId: `new_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-              fields: completeFields,
-            });
-          }
+          // 重新加载目标表记录（用于下一个源表的去重）
+          // 这样可以确保使用真实的 recordId，而不是临时 ID
+          const reloadedTargetRecords = await getRecords(
+            config.targetTableId,
+            (loaded) => setProgressText(`正在刷新目标表数据... (${loaded} 条)`),
+          );
+          targetRecords.length = 0;
+          targetRecords.push(...reloadedTargetRecords);
         } catch (err: any) {
           const errorMsg = `合并源表 "${sourceTableName}" 时出错: ${err?.message || '未知错误'}`;
           result.errorMessages.push(errorMsg);
