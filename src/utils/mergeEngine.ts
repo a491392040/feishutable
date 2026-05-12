@@ -86,24 +86,24 @@ export function mapRecordFields(
 
 /**
  * 对记录进行去重处理
- * @returns 包含 toMerge（待合并）和 toSkip（待跳过）的记录数组
+ * @returns 包含 toMerge（待合并）、toSkip（待跳过）、toDeleteIds（需删除的目标记录ID）的记录数组
  */
 export function deduplicateRecords(
   sourceRecords: IRecordData[],
   existingRecords: IRecordData[],
   config: IMergeConfig,
-): { toMerge: IRecordData[]; toSkip: IRecordData[] } {
+): { toMerge: IRecordData[]; toSkip: IRecordData[]; toDeleteIds: string[] } {
   if (!config.dedupConfig.enabled) {
     // 未启用去重，所有记录都合并
-    return { toMerge: [...sourceRecords], toSkip: [] };
+    return { toMerge: [...sourceRecords], toSkip: [], toDeleteIds: [] };
   }
 
-  // 构建目标表中已有记录的键集合
+  // 构建目标表中已有记录的键 → recordId 映射
   // 关键修复：目标记录的 fields key 是目标字段 ID，所以 isSourceRecord = false
-  const existingKeys = new Set<string>();
+  const existingKeyToId = new Map<string, string>();
   for (const record of existingRecords) {
     const key = generateRecordKey(record, config.dedupConfig, config.fieldMappings, false);
-    existingKeys.add(key);
+    existingKeyToId.set(key, record.recordId);
   }
   debugLog(`[去重] 目标+已合并记录数: ${existingRecords.length}, 去重模式: ${config.dedupConfig.mode}`);
 
@@ -112,11 +112,12 @@ export function deduplicateRecords(
 
   const toMerge: IRecordData[] = [];
   const toSkip: IRecordData[] = [];
+  const toDeleteIds: string[] = [];
 
   for (const sourceRecord of sourceRecords) {
     // 源记录用 sourceFieldId 取值
     const key = generateRecordKey(sourceRecord, config.dedupConfig, config.fieldMappings, true);
-    const hitExisting = existingKeys.has(key);
+    const hitExisting = existingKeyToId.has(key);
     const hitSource = sourceKeys.has(key);
 
     if (hitExisting || hitSource) {
@@ -124,6 +125,11 @@ export function deduplicateRecords(
       debugLog(`[去重] 跳过 ${sourceRecord.recordId} (命中${hitExisting ? '目标' : '源表'}), key=${key.slice(0, 150)}`);
       if (config.dedupConfig.strategy === 'overwrite') {
         toMerge.push(sourceRecord);
+        // 如果命中目标表记录，记录需要删除的目标记录 ID
+        if (hitExisting) {
+          const existingId = existingKeyToId.get(key);
+          if (existingId) toDeleteIds.push(existingId);
+        }
       } else {
         toSkip.push(sourceRecord);
       }
@@ -136,7 +142,7 @@ export function deduplicateRecords(
     sourceKeys.add(key);
   }
 
-  return { toMerge, toSkip };
+  return { toMerge, toSkip, toDeleteIds };
 }
 
 /**
@@ -231,19 +237,19 @@ export function splitRecord(
  * @param sourceRecords 源表记录
  * @param targetRecords 目标表记录
  * @param config 合并配置
- * @returns 待合并的记录和待跳过的记录
+ * @returns 待合并的记录、待跳过的记录、需删除的目标记录ID
  */
 export function mergeData(
   sourceRecords: IRecordData[],
   targetRecords: IRecordData[],
   config: IMergeConfig,
-): { toMerge: Record<string, unknown>[]; toSkip: IRecordData[] } {
-  const { toMerge, toSkip } = deduplicateRecords(sourceRecords, targetRecords, config);
+): { toMerge: Record<string, unknown>[]; toSkip: IRecordData[]; toDeleteIds: string[] } {
+  const { toMerge, toSkip, toDeleteIds } = deduplicateRecords(sourceRecords, targetRecords, config);
 
   // 将待合并的源记录转换为目标字段格式
   const mappedRecords = toMerge.map((record) => mapRecordFields(record, config));
 
-  return { toMerge: mappedRecords, toSkip };
+  return { toMerge: mappedRecords, toSkip, toDeleteIds };
 }
 
 /**

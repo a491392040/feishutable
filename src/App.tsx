@@ -29,6 +29,7 @@ import {
   ensureSelfLinkField,
   batchCreateRecordsWithHierarchy,
   batchCreateRecords,
+  batchDeleteRecords,
   getDebugLogs,
   debugLog as serviceDebugLog,
   sleep,
@@ -331,6 +332,7 @@ const App: React.FC = () => {
           setProgressText(`正在计算去重 (${sourceTableName})...`);
           let toMerge: Record<string, unknown>[] = [];
           let toSkip: IRecordData[] = [];
+          let toDeleteIds: string[] = [];
           await timer.recordPhase(`去重计算: ${sourceTableName}`, async () => {
             serviceDebugLog(`去重: 源表${sourceTableName} ${sourceRecords.length}条 vs 目标表+已合并 ${targetRecords.length}条`);
             const currentMappings = config.fieldMappings.filter(
@@ -341,9 +343,16 @@ const App: React.FC = () => {
             const mergeResult = mergeData(sourceRecords, targetRecords, currentConfig);
             toMerge = mergeResult.toMerge;
             toSkip = mergeResult.toSkip;
-            serviceDebugLog(`去重结果: toMerge=${toMerge.length}, toSkip=${toSkip.length}`);
+            toDeleteIds = mergeResult.toDeleteIds;
+            serviceDebugLog(`去重结果: toMerge=${toMerge.length}, toSkip=${toSkip.length}, toDeleteIds=${toDeleteIds.length}`);
           });
           result.skippedRecords += toSkip.length;
+
+          // 覆盖模式：先删除目标表中的重复记录
+          if (toDeleteIds.length > 0) {
+            serviceDebugLog(`[覆盖] 删除目标表 ${toDeleteIds.length} 条重复记录`);
+            await batchDeleteRecords(config.targetTableId, toDeleteIds);
+          }
 
           if (toMerge.length === 0) continue;
 

@@ -221,6 +221,26 @@ async function detectParentChildRelations(
 }
 
 /**
+ * 批量删除记录
+ */
+export async function batchDeleteRecords(
+  tableId: string,
+  recordIds: string[],
+): Promise<void> {
+  if (recordIds.length === 0) return;
+
+  const table = await bitable.base.getTable(tableId);
+  const batchSize = 500;
+
+  for (let i = 0; i < recordIds.length; i += batchSize) {
+    const batch = recordIds.slice(i, i + batchSize);
+    await table.deleteRecords(batch);
+    debugLog(`[删除] 已删除 ${batch.length} 条记录`);
+    await sleep(50);
+  }
+}
+
+/**
  * 批量创建记录到指定表（无父子关系时使用）
  * @param onProgress 进度回调（可选），参数为已创建记录数
  */
