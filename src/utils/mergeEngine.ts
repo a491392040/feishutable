@@ -134,9 +134,13 @@ export function deduplicateRecords(
       if (config.dedupConfig.strategy === 'overwrite') {
         toMerge.push(sourceRecord);
         // 如果命中目标表记录，记录需要删除的目标记录 ID
+        // 注意：只删除真正的目标表记录（非临时 ID），不删除本次合并过程中新写入的记录
         if (hitExisting) {
           const existingId = existingKeyToId.get(key);
-          if (existingId) toDeleteIds.push(existingId);
+          // 过滤掉临时生成的记录 ID（以 new_ 开头的）
+          if (existingId && !existingId.startsWith('new_')) {
+            toDeleteIds.push(existingId);
+          }
         }
       } else {
         toSkip.push(sourceRecord);
