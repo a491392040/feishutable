@@ -212,6 +212,7 @@ const App: React.FC = () => {
         dedupFieldNames.push(...config.fieldMappings.map((m) => m.targetFieldName));
       }
 
+      console.log('[DEBUG] personalBaseTokenValue:', personalBaseTokenValue);
       const dryRunData = {
         baseId,
         personalBaseToken: personalBaseTokenValue || '', // 需用户手动填入
@@ -502,7 +503,7 @@ const App: React.FC = () => {
       setMerging(false);
       setProgressText('');
     }
-  }, [getMergeConfig, tables]);
+  }, [getMergeConfig, tables, personalBaseTokenValue]);
 
   /** 映射单条记录字段 */
   const mapSingleRecord = (record: IRecordData, config: IMergeConfig): Record<string, unknown> => {
