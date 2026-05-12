@@ -44,7 +44,7 @@ import MergePreview from '@/components/MergePreview';
 const { Text } = Typography;
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.4.5';
+const APP_VERSION = 'v1.4.6';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -212,7 +212,6 @@ const App: React.FC = () => {
         dedupFieldNames.push(...config.fieldMappings.map((m) => m.targetFieldName));
       }
 
-      console.log('[DEBUG] personalBaseTokenValue:', personalBaseTokenValue);
       const dryRunData = {
         baseId,
         personalBaseToken: personalBaseTokenValue || '', // 需用户手动填入
