@@ -123,6 +123,8 @@ const App: React.FC = () => {
   const [splitConfig, setSplitConfig] = useState<ISplitConfig>(defaultSplitConfig);
   /** 仅生成参数（不执行写入） */
   const [dryRun, setDryRun] = useState(false);
+  /** 合并前清空目标表 */
+  const [clearTargetBeforeMerge, setClearTargetBeforeMerge] = useState(false);
   /** PersonalBaseToken（dryRun 模式使用） */
   const [personalBaseTokenValue, setPersonalBaseTokenValue] = useState('');
   /** 合并结果 */
@@ -241,6 +243,7 @@ const App: React.FC = () => {
           syncFieldNames: config.splitConfig.syncFieldNames,
           separator: config.splitConfig.separator,
         },
+        clearTargetBeforeMerge,
       };
 
       setMergeResult({
@@ -666,6 +669,22 @@ const App: React.FC = () => {
               config={splitConfig}
               onConfigChange={setSplitConfig}
             />
+            <Card size="small" style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <Text strong>合并前清空目标表</Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    开启后，合并前会删除目标表中的所有已有记录
+                  </Text>
+                </div>
+                <Switch
+                  checked={clearTargetBeforeMerge}
+                  onChange={setClearTargetBeforeMerge}
+                  disabled={dryRun}
+                />
+              </div>
+            </Card>
             <Card size="small" style={{ marginTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
