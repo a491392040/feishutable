@@ -43,11 +43,20 @@ export function filterUnsupportedFields(
       debugLog(`[过滤] 跳过只读字段 "${fieldMeta.name}" (type=${fieldMeta.type})`);
       continue;
     }
-    // 地理位置字段转换：只保留 location 字符串
+    // 地理位置字段转换：转换为 IOpenLocation 格式
     if (fieldMeta && fieldMeta.type === 22 && typeof value === 'object' && value !== null) {
       const loc = value as any;
       if (loc.location) {
-        filtered[fieldId] = loc.location;
+        // 转换为 SDK 需要的 IOpenLocation 格式（使用驼峰命名）
+        filtered[fieldId] = {
+          location: loc.location,
+          address: loc.address || '',
+          name: loc.name || '',
+          adname: loc.adname || '',
+          cityname: loc.cityname || '',
+          pname: loc.pname || '',
+          fullAddress: loc.full_address || loc.fullAddress || loc.address || '',
+        };
         continue;
       }
     }
