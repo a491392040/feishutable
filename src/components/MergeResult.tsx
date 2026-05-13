@@ -240,7 +240,23 @@ const MergeResult: React.FC<IMergeResultProps> = ({ result }) => {
       {/* 调试日志 */}
       {result.debugMessages && result.debugMessages.length > 0 && (
         <Card
-          title={<Space><BugOutlined style={{ color: '#3370ff' }} />调试日志</Space>}
+          title={
+            <Space>
+              <BugOutlined style={{ color: '#3370ff' }} />
+              调试日志
+              <Button
+                size="small"
+                type="primary"
+                ghost
+                onClick={() => {
+                  navigator.clipboard.writeText(result.debugMessages!.join('\n'));
+                  message.success('已复制到剪贴板');
+                }}
+              >
+                复制全部
+              </Button>
+            </Space>
+          }
           className="result-error-card"
           size="small"
         >

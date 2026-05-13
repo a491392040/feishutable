@@ -205,7 +205,6 @@ export async function detectParentChildRelations(
     for (const [fieldId, value] of Object.entries(record.fields)) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         const v = value as any;
-        debugLog(`[关联检测] 字段 ${fieldId} 值类型: object, keys=${Object.keys(v).join(',')}, 值=${JSON.stringify(v).substring(0, 200)}`);
         if ((v.recordIds || v.record_ids)) {
           const ids: string[] = v.recordIds || v.record_ids || [];
           if (Array.isArray(ids) && ids.length > 0) {
@@ -213,14 +212,11 @@ export async function detectParentChildRelations(
             const hasSelfRef = ids.some((id: string) => allKnownRecordIds.has(id));
             if (hasSelfRef) {
               linkFieldId = fieldId;
-              debugLog(`通过数据扫描发现关联字段: ${fieldId} (tableId=${v.tableId || '跨表'})`);
+              debugLog(`发现关联字段: ${fieldId}, 关联记录数=${ids.length}`);
               break;
             }
           }
         }
-      } else if (value && Array.isArray(value)) {
-        // 检查数组格式（某些关联字段可能是数组）
-        debugLog(`[关联检测] 字段 ${fieldId} 值类型: array, 长度=${value.length}, 第一项=${JSON.stringify(value[0]).substring(0, 200)}`);
       }
     }
     if (linkFieldId) break;
