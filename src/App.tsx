@@ -47,7 +47,7 @@ import MergePreview from '@/components/MergePreview';
 const { Text } = Typography;
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.6.1';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -175,8 +175,9 @@ const App: React.FC = () => {
       dedupConfig,
       splitConfig,
       dryRun,
+      clearTargetBeforeMerge,
     };
-  }, [sourceTableIds, targetTableId, fieldMappings, dedupConfig, splitConfig, dryRun]);
+  }, [sourceTableIds, targetTableId, fieldMappings, dedupConfig, splitConfig, dryRun, clearTargetBeforeMerge]);
 
   /** 执行合并操作（含耗时统计和父记录支持） */
   const handleExecuteMerge = useCallback(async () => {
@@ -283,8 +284,8 @@ const App: React.FC = () => {
       );
 
       // 清空目标表（如果配置了）
-      serviceDebugLog(`[清空目标表] clearTargetBeforeMerge=${clearTargetBeforeMerge}, targetRecords.length=${targetRecords.length}`);
-      if (clearTargetBeforeMerge && targetRecords.length > 0) {
+      serviceDebugLog(`[清空目标表] clearTargetBeforeMerge=${config.clearTargetBeforeMerge}, targetRecords.length=${targetRecords.length}`);
+      if (config.clearTargetBeforeMerge && targetRecords.length > 0) {
         setProgressText('正在清空目标表...');
         const allIds = targetRecords.map((r) => r.recordId);
         serviceDebugLog(`[清空目标表] 准备删除 ${allIds.length} 条记录: ${allIds.join(',')}`);
@@ -293,7 +294,7 @@ const App: React.FC = () => {
         serviceDebugLog(`[清空目标表] 已清空目标表 ${allIds.length} 条记录`);
         message.info(`已清空目标表 ${allIds.length} 条记录`);
       } else {
-        serviceDebugLog(`[清空目标表] 跳过清空: clearTargetBeforeMerge=${clearTargetBeforeMerge}, targetRecords.length=${targetRecords.length}`);
+        serviceDebugLog(`[清空目标表] 跳过清空: clearTargetBeforeMerge=${config.clearTargetBeforeMerge}, targetRecords.length=${targetRecords.length}`);
       }
 
       // 阶段2：加载源表记录

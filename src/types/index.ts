@@ -91,6 +91,8 @@ export interface IMergeConfig {
   splitConfig: ISplitConfig;
   /** 是否仅生成参数（不执行写入） */
   dryRun?: boolean;
+  /** 合并前清空目标表 */
+  clearTargetBeforeMerge?: boolean;
 }
 
 /**
