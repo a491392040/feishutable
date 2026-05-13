@@ -43,6 +43,14 @@ export function filterUnsupportedFields(
       debugLog(`[过滤] 跳过只读字段 "${fieldMeta.name}" (type=${fieldMeta.type})`);
       continue;
     }
+    // 地理位置字段转换：只保留 location 字符串
+    if (fieldMeta && fieldMeta.type === 22 && typeof value === 'object' && value !== null) {
+      const loc = value as any;
+      if (loc.location) {
+        filtered[fieldId] = loc.location;
+        continue;
+      }
+    }
     filtered[fieldId] = value;
   }
   return filtered;
