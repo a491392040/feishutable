@@ -380,9 +380,40 @@ export async function batchCreateRecordsWithHierarchy(
     const batchSize = 500;
     for (let i = 0; i < parentEntries.length; i += batchSize) {
       const batch = parentEntries.slice(i, i + batchSize);
-      const recordValues: IRecordValue[] = batch.map((entry) => ({
-        fields: entry.fields as IRecordValue['fields'],
-      }));
+      const recordValues: IRecordValue[] = [];
+
+      for (const entry of batch) {
+        const fields = { ...entry.fields };
+
+        // 转换所有关联字段的 recordIds（父记录中的关联字段）
+        for (const [fieldId, value] of Object.entries(fields)) {
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            const v = value as any;
+            if (v.recordIds || v.record_ids) {
+              const oldIds: string[] = v.recordIds || v.record_ids || [];
+              const newIds: string[] = [];
+              for (const oldId of oldIds) {
+                const newId = sourceToNewIdMap.get(oldId);
+                if (newId) {
+                  newIds.push(newId);
+                }
+              }
+              if (newIds.length > 0) {
+                fields[fieldId] = {
+                  text: v.text || '',
+                  type: v.type || 'text',
+                  recordIds: newIds,
+                  tableId: v.tableId || tableId,
+                };
+                debugLog(`[Hierarchy] 父记录关联字段 ${fieldId}: ${oldIds.join(',')} -> ${newIds.join(',')}`);
+              }
+            }
+          }
+        }
+
+        recordValues.push({ fields: fields as IRecordValue['fields'] });
+      }
+
       const newRecordIds = await table.addRecords(recordValues);
       for (let j = 0; j < newRecordIds.length; j++) {
         sourceToNewIdMap.set(batch[j].sourceRecordId, newRecordIds[j]);
@@ -407,6 +438,35 @@ export async function batchCreateRecordsWithHierarchy(
       for (const entry of batch) {
         const fields = { ...entry.fields };
 
+        // 转换所有关联字段的 recordIds
+        for (const [fieldId, value] of Object.entries(fields)) {
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            const v = value as any;
+            if (v.recordIds || v.record_ids) {
+              const oldIds: string[] = v.recordIds || v.record_ids || [];
+              const newIds: string[] = [];
+              for (const oldId of oldIds) {
+                const newId = sourceToNewIdMap.get(oldId);
+                if (newId) {
+                  newIds.push(newId);
+                } else {
+                  debugLog(`[Hierarchy] 警告: 关联字段 ${fieldId} 找不到映射 oldId=${oldId}`);
+                }
+              }
+              if (newIds.length > 0) {
+                fields[fieldId] = {
+                  text: v.text || '',
+                  type: v.type || 'text',
+                  recordIds: newIds,
+                  tableId: v.tableId || tableId,
+                };
+                debugLog(`[Hierarchy] 转换关联字段 ${fieldId}: ${oldIds.join(',')} -> ${newIds.join(',')}`);
+              }
+            }
+          }
+        }
+
+        // 处理父子关系关联字段
         if (entry.linkFieldId && entry.sourceParentId) {
           const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
           debugLog(`[Hierarchy] 子记录关联: sourceParentId=${entry.sourceParentId}, newParentId=${newParentId}, linkFieldId=${entry.linkFieldId}`);

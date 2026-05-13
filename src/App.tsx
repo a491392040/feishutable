@@ -47,7 +47,7 @@ import MergePreview from '@/components/MergePreview';
 const { Text } = Typography;
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.5.8';
+const APP_VERSION = 'v1.5.9';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -535,6 +535,13 @@ const App: React.FC = () => {
     for (const mapping of config.fieldMappings) {
       const value = record.fields[mapping.sourceFieldId];
       if (value !== undefined && value !== null) {
+        // 调试：检查关联字段的值
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          const v = value as any;
+          if (v.recordIds || v.record_ids) {
+            serviceDebugLog(`[字段映射] 关联字段 ${mapping.sourceFieldName} -> ${mapping.targetFieldName}, recordIds=${JSON.stringify(v.recordIds || v.record_ids)}`);
+          }
+        }
         mapped[mapping.targetFieldId] = value;
       }
     }
