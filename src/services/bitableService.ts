@@ -123,9 +123,16 @@ export async function getRecordCount(tableId: string): Promise<number> {
  * 同时检测记录的父子关系（通过关联字段实现）
  * @param onProgress 进度回调（可选），参数为已加载记录数
  */
+/**
+ * 获取表的所有记录
+ * @param tableId 表 ID
+ * @param onProgress 进度回调
+ * @param allRecordIds 可选：所有源表的 recordId 集合，用于跨表关联检测。如果不传，则跳过父子关系检测
+ */
 export async function getRecords(
   tableId: string,
   onProgress?: (loaded: number) => void,
+  allRecordIds?: Set<string>,
 ): Promise<IRecordData[]> {
   const table = await bitable.base.getTable(tableId);
   const records: IRecordData[] = [];
@@ -152,8 +159,8 @@ export async function getRecords(
     }
   } while (pageToken);
 
-  // 检测父子关系
-  const parentChildMap = await detectParentChildRelations(tableId, records);
+  // 检测父子关系（传入所有源表的 recordId 集合用于跨表关联检测）
+  const parentChildMap = await detectParentChildRelations(tableId, records, allRecordIds);
   if (parentChildMap) {
     for (const record of records) {
       const relation = parentChildMap.get(record.recordId);
@@ -171,16 +178,22 @@ export async function getRecords(
 /**
  * 检测记录间的父子关系
  * 策略：扫描记录数据中所有字段值，找到包含关联格式（recordIds）的字段，
- * 如果 recordIds 指向当前表中的记录，则认为是父子关系
+ * 如果 recordIds 指向当前表或跨表中的记录，则认为是父子关系
+ * @param tableId 当前表 ID
+ * @param records 当前表的记录
+ * @param externalRecordIds 可选：其他表的 recordId 集合，用于跨表关联检测
  */
-async function detectParentChildRelations(
+export async function detectParentChildRelations(
   tableId: string,
   records: IRecordData[],
+  externalRecordIds?: Set<string>,
 ): Promise<Map<string, { parentId?: string; childIds: string[] }> | null> {
   if (records.length === 0) return null;
 
   // 收集当前表所有 recordId，用于判断关联是否指向当前表
-  const allRecordIds = new Set(records.map((r) => r.recordId));
+  const currentTableRecordIds = new Set(records.map((r) => r.recordId));
+  // 合并外部 recordId（用于跨表关联检测）
+  const allKnownRecordIds = externalRecordIds || currentTableRecordIds;
 
   // 第一步：通过扫描记录数据发现关联字段
   let linkFieldId: string | null = null;
@@ -192,11 +205,12 @@ async function detectParentChildRelations(
     for (const [fieldId, value] of Object.entries(record.fields)) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         const v = value as any;
+        debugLog(`[关联检测] 字段 ${fieldId} 值类型: object, keys=${Object.keys(v).join(',')}, 值=${JSON.stringify(v).substring(0, 200)}`);
         if ((v.recordIds || v.record_ids)) {
           const ids: string[] = v.recordIds || v.record_ids || [];
           if (Array.isArray(ids) && ids.length > 0) {
-            // 检查是否有关联值指向当前表中的记录
-            const hasSelfRef = ids.some((id: string) => allRecordIds.has(id));
+            // 检查是否有关联值指向已知记录（当前表或跨表）
+            const hasSelfRef = ids.some((id: string) => allKnownRecordIds.has(id));
             if (hasSelfRef) {
               linkFieldId = fieldId;
               debugLog(`通过数据扫描发现关联字段: ${fieldId} (tableId=${v.tableId || '跨表'})`);
@@ -204,6 +218,9 @@ async function detectParentChildRelations(
             }
           }
         }
+      } else if (value && Array.isArray(value)) {
+        // 检查数组格式（某些关联字段可能是数组）
+        debugLog(`[关联检测] 字段 ${fieldId} 值类型: array, 长度=${value.length}, 第一项=${JSON.stringify(value[0]).substring(0, 200)}`);
       }
     }
     if (linkFieldId) break;
@@ -246,8 +263,8 @@ async function detectParentChildRelations(
       const parentIds: string[] = v.recordIds || v.record_ids || [];
 
       if (parentIds.length > 0) {
-        // 只取指向当前表中记录的 ID 作为父记录
-        const validParentIds = parentIds.filter((id: string) => allRecordIds.has(id));
+        // 只取指向已知记录的 ID 作为父记录（当前表或跨表）
+        const validParentIds = parentIds.filter((id: string) => allKnownRecordIds.has(id));
         if (validParentIds.length > 0) {
           relation.parentId = validParentIds[0];
           for (const pid of validParentIds) {

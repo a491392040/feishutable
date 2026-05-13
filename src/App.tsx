@@ -35,6 +35,7 @@ import {
   debugLog as serviceDebugLog,
   sleep,
   filterUnsupportedFields,
+  detectParentChildRelations,
 } from '@/services/bitableService';
 import { splitRecord } from '@/utils/mergeEngine';
 import TableSelector from '@/components/TableSelector';
@@ -46,7 +47,7 @@ import MergePreview from '@/components/MergePreview';
 const { Text } = Typography;
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.5.1';
+const APP_VERSION = 'v1.5.2';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
@@ -290,7 +291,7 @@ const App: React.FC = () => {
         message.info(`已清空目标表 ${allIds.length} 条记录`);
       }
 
-      // 检测源表是否有父子关系
+      // 阶段2：加载源表记录
       let hasAnyParentChild = false;
       const allSourceRecordsMap = new Map<string, IRecordData[]>();
       for (const sourceTableId of config.sourceTableIds) {
@@ -306,7 +307,6 @@ const App: React.FC = () => {
         if (records.some((r) => r.parentRecordId)) {
           hasAnyParentChild = true;
         }
-        // 源表间加载间隔，避免连续请求卡顿
         await sleep(50);
       }
       serviceDebugLog(`hasAnyParentChild = ${hasAnyParentChild}`);
