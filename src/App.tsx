@@ -47,7 +47,7 @@ import MergePreview from '@/components/MergePreview';
 const { Text } = Typography;
 
 /** 版本号 - 每次修复后递增 */
-const APP_VERSION = 'v1.5.3';
+const APP_VERSION = 'v1.5.4';
 const defaultDedupConfig: IDedupConfig = {
   enabled: false,
   mode: 'all_fields',
