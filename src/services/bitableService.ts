@@ -392,13 +392,14 @@ export async function batchCreateRecordsWithHierarchy(
 
         if (entry.linkFieldId && entry.sourceParentId) {
           const newParentId = sourceToNewIdMap.get(entry.sourceParentId);
+          debugLog(`[Hierarchy] 子记录关联: sourceParentId=${entry.sourceParentId}, newParentId=${newParentId}, linkFieldId=${entry.linkFieldId}`);
           if (newParentId) {
             fields[entry.linkFieldId] = {
-              text: '',
-              type: 'text',
               recordIds: [newParentId],
-              tableId: tableId,
             };
+            debugLog(`[Hierarchy] 设置关联字段: ${entry.linkFieldId} = [${newParentId}]`);
+          } else {
+            debugLog(`[Hierarchy] 警告: 找不到父记录映射 sourceParentId=${entry.sourceParentId}`);
           }
         }
 

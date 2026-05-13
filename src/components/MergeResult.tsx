@@ -248,9 +248,33 @@ const MergeResult: React.FC<IMergeResultProps> = ({ result }) => {
                 size="small"
                 type="primary"
                 ghost
-                onClick={() => {
-                  navigator.clipboard.writeText(result.debugMessages!.join('\n'));
-                  message.success('已复制到剪贴板');
+                onClick={async () => {
+                  const text = result.debugMessages!.join('\n');
+                  try {
+                    // 尝试使用现代 Clipboard API
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                      await navigator.clipboard.writeText(text);
+                      message.success('已复制到剪贴板');
+                    } else {
+                      throw new Error('Clipboard API not available');
+                    }
+                  } catch (err) {
+                    // 降级方案：使用传统方法
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.left = '-9999px';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    try {
+                      document.execCommand('copy');
+                      message.success('已复制到剪贴板');
+                    } catch (e) {
+                      message.error('复制失败，请手动复制');
+                    } finally {
+                      document.body.removeChild(textarea);
+                    }
+                  }
                 }}
               >
                 复制全部
