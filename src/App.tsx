@@ -276,10 +276,19 @@ const App: React.FC = () => {
     try {
       // 阶段1：加载目标表数据
       setProgressText('正在加载目标表数据...');
-      const targetRecords = await getRecords(
+      let targetRecords = await getRecords(
         config.targetTableId,
         (loaded) => setProgressText(`正在加载目标表数据... (${loaded} 条)`),
       );
+
+      // 清空目标表（如果配置了）
+      if (clearTargetBeforeMerge && targetRecords.length > 0) {
+        setProgressText('正在清空目标表...');
+        const allIds = targetRecords.map((r) => r.recordId);
+        await batchDeleteRecords(config.targetTableId, allIds);
+        targetRecords = [];
+        message.info(`已清空目标表 ${allIds.length} 条记录`);
+      }
 
       // 检测源表是否有父子关系
       let hasAnyParentChild = false;

@@ -170,7 +170,8 @@ export async function getRecords(
 
 /**
  * 检测记录间的父子关系
- * 策略：扫描记录数据中所有字段值，找到包含 IOpenLink 格式且 tableId 指向自身的字段
+ * 策略：扫描记录数据中所有字段值，找到包含关联格式（recordIds）的字段，
+ * 如果 recordIds 指向当前表中的记录，则认为是父子关系
  */
 async function detectParentChildRelations(
   tableId: string,
@@ -178,42 +179,47 @@ async function detectParentChildRelations(
 ): Promise<Map<string, { parentId?: string; childIds: string[] }> | null> {
   if (records.length === 0) return null;
 
-  // 第一步：通过扫描记录数据发现自关联字段
-  let selfLinkFieldId: string | null = null;
+  // 收集当前表所有 recordId，用于判断关联是否指向当前表
+  const allRecordIds = new Set(records.map((r) => r.recordId));
 
-  // 只扫描前 100 条记录来发现自关联字段（不需要扫全部）
+  // 第一步：通过扫描记录数据发现关联字段
+  let linkFieldId: string | null = null;
+
+  // 只扫描前 100 条记录来发现关联字段
   const scanLimit = Math.min(records.length, 100);
   for (let i = 0; i < scanLimit; i++) {
     const record = records[i];
     for (const [fieldId, value] of Object.entries(record.fields)) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         const v = value as any;
-        if ((v.recordIds || v.record_ids) && v.tableId) {
-          const ids = v.recordIds || v.record_ids || [];
-          if (Array.isArray(ids) && ids.length > 0 && v.tableId === tableId) {
-            selfLinkFieldId = fieldId;
-            debugLog(`通过数据扫描发现自关联字段: ${fieldId} (tableId=${v.tableId})`);
-            break;
+        if ((v.recordIds || v.record_ids)) {
+          const ids: string[] = v.recordIds || v.record_ids || [];
+          if (Array.isArray(ids) && ids.length > 0) {
+            // 检查是否有关联值指向当前表中的记录
+            const hasSelfRef = ids.some((id: string) => allRecordIds.has(id));
+            if (hasSelfRef) {
+              linkFieldId = fieldId;
+              debugLog(`通过数据扫描发现关联字段: ${fieldId} (tableId=${v.tableId || '跨表'})`);
+              break;
+            }
           }
         }
       }
     }
-    if (selfLinkFieldId) break;
+    if (linkFieldId) break;
   }
 
   // 第二步：如果数据扫描没找到，尝试通过字段元数据查找
-  if (!selfLinkFieldId) {
+  if (!linkFieldId) {
     try {
       const table = await bitable.base.getTable(tableId);
       const fieldMetaList = await table.getFieldMetaList();
       for (const fieldMeta of fieldMetaList) {
         if (fieldMeta.type === 18 || fieldMeta.type === 19) {
-          const property = (fieldMeta as any).property;
-          if (property && property.tableId === tableId) {
-            selfLinkFieldId = fieldMeta.id;
-            debugLog(`通过字段元数据发现自关联字段: ${fieldMeta.name}(ID:${fieldMeta.id})`);
-            break;
-          }
+          // 双向关联(18)或单向关联(17)字段
+          linkFieldId = fieldMeta.id;
+          debugLog(`通过字段元数据发现关联字段: ${fieldMeta.name}(ID:${fieldMeta.id})`);
+          break;
         }
       }
     } catch (e: any) {
@@ -221,9 +227,9 @@ async function detectParentChildRelations(
     }
   }
 
-  debugLog(`最终 selfLinkFieldId = ${selfLinkFieldId}`);
+  debugLog(`最终 linkFieldId = ${linkFieldId}`);
 
-  if (!selfLinkFieldId) return null;
+  if (!linkFieldId) return null;
 
   // 第三步：构建父子关系映射
   const relationMap = new Map<string, { parentId?: string; childIds: string[] }>();
@@ -232,7 +238,7 @@ async function detectParentChildRelations(
   }
 
   for (const record of records) {
-    const linkValue = record.fields[selfLinkFieldId];
+    const linkValue = record.fields[linkFieldId];
     const relation = relationMap.get(record.recordId)!;
 
     if (linkValue && typeof linkValue === 'object' && !Array.isArray(linkValue)) {
@@ -240,11 +246,15 @@ async function detectParentChildRelations(
       const parentIds: string[] = v.recordIds || v.record_ids || [];
 
       if (parentIds.length > 0) {
-        relation.parentId = parentIds[0];
-        for (const pid of parentIds) {
-          const parentRelation = relationMap.get(pid);
-          if (parentRelation) {
-            parentRelation.childIds.push(record.recordId);
+        // 只取指向当前表中记录的 ID 作为父记录
+        const validParentIds = parentIds.filter((id: string) => allRecordIds.has(id));
+        if (validParentIds.length > 0) {
+          relation.parentId = validParentIds[0];
+          for (const pid of validParentIds) {
+            const parentRelation = relationMap.get(pid);
+            if (parentRelation) {
+              parentRelation.childIds.push(record.recordId);
+            }
           }
         }
       }
